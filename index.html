@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -79,7 +79,10 @@
       <span>cada 5s</span>
     </div>
   </div>
-  <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)" id="last-poll">—</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)" id="last-poll">—</div>
+    <button id="admin-btn" onclick="adminLogin()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace">🔒 Admin</button>
+  </div>
 </div>
 
 <div class="main">
@@ -104,8 +107,9 @@
 // ═══════════════════════════════════
 var CONFIG = {
   apiToken: "ef34e5f138248b50aa33fe77da33c129351e83fb",
-  alertDuration: 30,   // segundos que dura la alerta visible
-  pollInterval: 5000,  // ms entre consultas a Datacake
+  adminPassword: "admin123",   // cambiá esta contraseña
+  alertDuration: 30,
+  pollInterval: 5000,
   devices: [
     {
       id:    "9157714d-7ecb-4efd-87a4-4cfc0ec2fccb",
@@ -123,6 +127,8 @@ var CONFIG = {
 // ═══════════════════════════════════
 // ESTADO
 // ═══════════════════════════════════
+var isAdmin = false;
+
 var state = {};
 CONFIG.devices.forEach(function(d) {
   state[d.id] = {
@@ -150,6 +156,9 @@ var map = L.map('map', {
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
 
 function makeOkIcon() {
+  return L.divIcon({ html:'<div style="width:0;height:0"></div>', className:'', iconSize:[0,0], iconAnchor:[0,0] });
+}
+function makeVisibleIcon() {
   return L.divIcon({ html:'<div class="marker-ok">📍</div>', className:'', iconSize:[32,32], iconAnchor:[16,16] });
 }
 function makeAlertIcon() {
@@ -176,14 +185,16 @@ function renderSidebar() {
     var card = document.createElement('div');
     card.className = 'device-card' + (s.alerting ? ' alerting' : '');
     card.onclick = function() { map.setView([d.lat, d.lng], 16); };
+    var eyeBtn = isAdmin ? '<button onclick="locateDevice(event,\'' + d.id + '\')" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;margin-top:6px">👁 ubicar</button>' : '';
     card.innerHTML =
       '<div class="device-name">' + d.label +
         ' <span class="device-status-badge ' + (s.alerting ? 'badge-active' : 'badge-ok') + '">' +
         (s.alerting ? '⚠ ACTIVO' : '✓ OK') + '</span></div>' +
       '<div style="font-size:13px;color:var(--text)">' + d.name + '</div>' +
-      '<div class="device-coords">' + d.lat.toFixed(5) + ', ' + d.lng.toFixed(5) + '</div>' +
+      (isAdmin ? '<div class="device-coords">' + d.lat.toFixed(5) + ', ' + d.lng.toFixed(5) + '</div>' : '') +
       '<div class="device-last">' + (s.lastSeen ? 'Visto: ' + s.lastSeen : 'Sin datos aún') + '</div>' +
-      '<div class="device-timer" id="timer-card-' + d.id + '">⏱ expira en <span id="tval-' + d.id + '">—</span>s</div>';
+      '<div class="device-timer" id="timer-card-' + d.id + '">⏱ expira en <span id="tval-' + d.id + '">—</span>s</div>' +
+      eyeBtn;
     list.appendChild(card);
   });
 }
@@ -323,6 +334,34 @@ function poll() {
     document.getElementById('conn-dot').className = 'status-dot online';
     document.getElementById('conn-label').textContent = 'CONECTADO';
   }, 1500);
+}
+
+function locateDevice(e, deviceId) {
+  e.stopPropagation();
+  var device = CONFIG.devices.find(function(d){ return d.id === deviceId; });
+  if (!device) return;
+  var s = state[deviceId];
+  map.setView([device.lat, device.lng], 17);
+  s.marker.setIcon(makeVisibleIcon());
+  s.marker.bindPopup('<b>' + device.name + '</b><br>📍 Ubicación').openPopup();
+  setTimeout(function() {
+    if (!s.alerting) {
+      s.marker.setIcon(makeOkIcon());
+      s.marker.closePopup();
+    }
+  }, 5000);
+}
+
+function adminLogin() {
+  var pwd = prompt("Contraseña de administrador:");
+  if (pwd === CONFIG.adminPassword) {
+    isAdmin = true;
+    document.getElementById('admin-btn').textContent = '🔓 Admin';
+    document.getElementById('admin-btn').style.color = 'var(--success)';
+    renderSidebar();
+  } else if (pwd !== null) {
+    alert("Contraseña incorrecta");
+  }
 }
 
 poll();
