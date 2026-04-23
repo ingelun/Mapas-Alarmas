@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema de Alarmas — Mapa</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@400;600;700&display=swap');
+  :root {
+    --bg: #0b0f1a; --panel: #111827; --border: #1e2d45;
+    --accent: #00d4ff; --danger: #ff3b5c; --success: #00e896;
+    --warning: #ffb800; --text: #e2e8f0; --muted: #4a5568;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'Barlow',sans-serif; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  .topbar { background:var(--panel); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .logo { font-family:'Share Tech Mono',monospace; font-size:16px; color:var(--accent); letter-spacing:2px; }
+  .logo span { color:var(--danger); }
+  .status-item { display:flex; align-items:center; gap:6px; font-size:12px; color:var(--muted); font-family:'Share Tech Mono',monospace; }
+  .status-dot { width:8px; height:8px; border-radius:50%; background:var(--muted); }
+  .status-dot.online { background:var(--success); box-shadow:0 0 6px var(--success); }
+  .spinner { width:10px; height:10px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; display:none; }
+  .spinner.active { display:block; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  .sidebar { width:260px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; }
+  .sidebar-title { padding:14px 18px; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--muted); border-bottom:1px solid var(--border); font-family:'Share Tech Mono',monospace; }
+  .device-list { flex:1; overflow-y:auto; padding:8px; }
+  .device-card { background:#0d1520; border:1px solid var(--border); border-radius:8px; padding:12px 14px; margin-bottom:8px; cursor:pointer; transition:all 0.2s; }
+  .device-card:hover { border-color:var(--accent); }
+  .device-card.alerting { border-color:var(--danger); background:rgba(255,59,92,0.08); animation:card-pulse 1s ease infinite; }
+  @keyframes card-pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,59,92,0.3);} 50%{box-shadow:0 0 0 6px rgba(255,59,92,0);} }
+  .device-name { font-size:14px; font-weight:600; margin-bottom:4px; display:flex; align-items:center; gap:8px; }
+  .device-status-badge { font-size:10px; font-family:'Share Tech Mono',monospace; padding:2px 6px; border-radius:4px; font-weight:700; }
+  .badge-active { background:rgba(255,59,92,0.2); color:var(--danger); }
+  .badge-ok { background:rgba(0,232,150,0.15); color:var(--success); }
+  .device-coords { font-size:11px; color:var(--muted); font-family:'Share Tech Mono',monospace; margin-top:4px; }
+  .device-timer { font-size:12px; color:var(--warning); font-family:'Share Tech Mono',monospace; margin-top:6px; display:none; }
+  .device-card.alerting .device-timer { display:block; }
+  .device-last { font-size:11px; color:var(--muted); margin-top:4px; }
+  .config-panel { padding:14px 18px; border-top:1px solid var(--border); font-size:11px; color:var(--muted); font-family:'Share Tech Mono',monospace; }
+  .config-row { display:flex; justify-content:space-between; margin-bottom:5px; }
+  .config-val { color:var(--accent); }
+
+  #map { flex:1; }
+
+  .alert-panel { position:fixed; top:65px; right:16px; width:280px; z-index:2000; display:flex; flex-direction:column; gap:8px; pointer-events:none; }
+  .alert-toast { background:var(--panel); border:1px solid var(--danger); border-left:4px solid var(--danger); border-radius:8px; padding:12px 14px; pointer-events:all; animation:slide-in 0.3s ease; box-shadow:0 4px 20px rgba(255,59,92,0.3); }
+  @keyframes slide-in { from{transform:translateX(100%);opacity:0;} to{transform:translateX(0);opacity:1;} }
+  .toast-title { font-size:13px; font-weight:700; color:var(--danger); display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+  .toast-body { font-size:12px; color:var(--muted); font-family:'Share Tech Mono',monospace; }
+  .toast-countdown { height:3px; background:var(--border); border-radius:99px; margin-top:8px; overflow:hidden; }
+  .toast-bar { height:100%; background:var(--danger); border-radius:99px; transition:width 1s linear; }
+
+  .timer-display { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:rgba(255,59,92,0.15); border:1px solid var(--danger); border-radius:99px; padding:7px 20px; font-family:'Share Tech Mono',monospace; font-size:13px; color:var(--danger); z-index:2000; display:none; backdrop-filter:blur(8px); }
+  .timer-display.visible { display:block; }
+
+  .marker-pulse { width:40px; height:40px; border-radius:50%; background:var(--danger); border:3px solid white; box-shadow:0 0 0 0 rgba(255,59,92,0.7); animation:marker-ring 1s ease infinite; display:flex; align-items:center; justify-content:center; font-size:18px; }
+  @keyframes marker-ring { 0%{box-shadow:0 0 0 0 rgba(255,59,92,0.7);} 70%{box-shadow:0 0 0 16px rgba(255,59,92,0);} 100%{box-shadow:0 0 0 0 rgba(255,59,92,0);} }
+  .marker-ok { width:32px; height:32px; border-radius:50%; background:var(--success); border:2px solid rgba(255,255,255,0.3); display:flex; align-items:center; justify-content:center; font-size:14px; opacity:0.7; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">ALARM<span>MAP</span></div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="status-item">
+      <div class="status-dot online" id="conn-dot"></div>
+      <span id="conn-label">CONECTADO</span>
+    </div>
+    <div class="status-item">
+      <div class="spinner" id="spinner"></div>
+      <span>cada 5s</span>
+    </div>
+  </div>
+  <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)" id="last-poll">—</div>
+</div>
+
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-title">// dispositivos</div>
+    <div class="device-list" id="device-list"></div>
+    <div class="config-panel">
+      <div class="config-row"><span>POLL</span><span class="config-val">5s</span></div>
+      <div class="config-row"><span>ALERTA</span><span class="config-val" id="cfg-timeout">30s</span></div>
+      <div class="config-row"><span>DEVICES</span><span class="config-val" id="cfg-devices">—</span></div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<div class="alert-panel" id="alert-panel"></div>
+<div class="timer-display" id="timer-display">⏱ <span id="timer-val">30</span>s</div>
+
+<script>
+// ═══════════════════════════════════
+// CONFIGURACIÓN — editá esto
+// ═══════════════════════════════════
+var CONFIG = {
+  apiToken: "ef34e5f138248b50aa33fe77da33c129351e83fb",
+  alertDuration: 30,   // segundos que dura la alerta visible
+  pollInterval: 5000,  // ms entre consultas a Datacake
+  devices: [
+    {
+      id:    "9157714d-7ecb-4efd-87a4-4cfc0ec2fccb",
+      name:  "Botón 1 — Xiao1",
+      field: "BUTTON_PRESS",
+      lat:   -31.428298,
+      lng:   -64.216270,
+      label: "B1"
+    }
+    // Para agregar más botones copiar el bloque de arriba:
+    // { id: "DEVICE_ID_2", name: "Botón 2", field: "BUTTON_PRESS", lat: -31.43, lng: -64.22, label: "B2" }
+  ]
+};
+
+// ═══════════════════════════════════
+// ESTADO
+// ═══════════════════════════════════
+var state = {};
+CONFIG.devices.forEach(function(d) {
+  state[d.id] = {
+    alerting: false,
+    alertStart: null,
+    marker: null,
+    toast: null,
+    timerInterval: null,
+    lastValue: null,
+    lastSeen: null,
+    lastHeardSeen: null,
+    initialized: false
+  };
+});
+
+// ═══════════════════════════════════
+// MAPA
+// ═══════════════════════════════════
+var map = L.map('map', {
+  center: [CONFIG.devices[0].lat, CONFIG.devices[0].lng],
+  zoom: 15,
+  attributionControl: false
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
+
+function makeOkIcon() {
+  return L.divIcon({ html:'<div class="marker-ok">📍</div>', className:'', iconSize:[32,32], iconAnchor:[16,16] });
+}
+function makeAlertIcon() {
+  return L.divIcon({ html:'<div class="marker-pulse">🔔</div>', className:'', iconSize:[40,40], iconAnchor:[20,20] });
+}
+
+CONFIG.devices.forEach(function(d) {
+  var marker = L.marker([d.lat, d.lng], { icon: makeOkIcon() }).addTo(map);
+  marker.bindPopup('<b>' + d.name + '</b><br>Sin alertas');
+  state[d.id].marker = marker;
+});
+
+document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
+document.getElementById('cfg-timeout').textContent = CONFIG.alertDuration + 's';
+
+// ═══════════════════════════════════
+// SIDEBAR
+// ═══════════════════════════════════
+function renderSidebar() {
+  var list = document.getElementById('device-list');
+  list.innerHTML = '';
+  CONFIG.devices.forEach(function(d) {
+    var s = state[d.id];
+    var card = document.createElement('div');
+    card.className = 'device-card' + (s.alerting ? ' alerting' : '');
+    card.onclick = function() { map.setView([d.lat, d.lng], 16); };
+    card.innerHTML =
+      '<div class="device-name">' + d.label +
+        ' <span class="device-status-badge ' + (s.alerting ? 'badge-active' : 'badge-ok') + '">' +
+        (s.alerting ? '⚠ ACTIVO' : '✓ OK') + '</span></div>' +
+      '<div style="font-size:13px;color:var(--text)">' + d.name + '</div>' +
+      '<div class="device-coords">' + d.lat.toFixed(5) + ', ' + d.lng.toFixed(5) + '</div>' +
+      '<div class="device-last">' + (s.lastSeen ? 'Visto: ' + s.lastSeen : 'Sin datos aún') + '</div>' +
+      '<div class="device-timer" id="timer-card-' + d.id + '">⏱ expira en <span id="tval-' + d.id + '">—</span>s</div>';
+    list.appendChild(card);
+  });
+}
+renderSidebar();
+
+// ═══════════════════════════════════
+// ALERTAS
+// ═══════════════════════════════════
+function startAlert(device) {
+  var s = state[device.id];
+  if (s.alerting) return;
+  s.alerting = true;
+  s.alertStart = Date.now();
+
+  s.marker.setIcon(makeAlertIcon());
+  s.marker.bindPopup('<b style="color:#ff3b5c">⚠ ALERTA</b><br>' + device.name).openPopup();
+
+  var toast = document.createElement('div');
+  toast.className = 'alert-toast';
+  toast.innerHTML =
+    '<div class="toast-title">🔴 ' + device.label + ' — ALERTA</div>' +
+    '<div class="toast-body">' + device.name + '</div>' +
+    '<div class="toast-countdown"><div class="toast-bar" id="tbar-' + device.id + '" style="width:100%"></div></div>';
+  document.getElementById('alert-panel').appendChild(toast);
+  s.toast = toast;
+
+  document.getElementById('timer-display').classList.add('visible');
+
+  var remaining = CONFIG.alertDuration;
+  document.getElementById('timer-val').textContent = remaining;
+
+  s.timerInterval = setInterval(function() {
+    remaining--;
+    var pct = (remaining / CONFIG.alertDuration * 100) + '%';
+    var bar = document.getElementById('tbar-' + device.id);
+    if (bar) bar.style.width = pct;
+    document.getElementById('timer-val').textContent = remaining;
+    var tval = document.getElementById('tval-' + device.id);
+    if (tval) tval.textContent = remaining;
+    if (remaining <= 0) { clearInterval(s.timerInterval); endAlert(device); }
+  }, 1000);
+
+  renderSidebar();
+}
+
+function endAlert(device) {
+  var s = state[device.id];
+  s.alerting = false;
+  s.alertStart = null;
+  s.marker.setIcon(makeOkIcon());
+  s.marker.closePopup();
+  s.marker.bindPopup('<b>' + device.name + '</b><br>Sin alertas');
+  if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
+  s.toast = null;
+  var anyAlert = CONFIG.devices.some(function(d) { return state[d.id].alerting; });
+  if (!anyAlert) document.getElementById('timer-display').classList.remove('visible');
+  renderSidebar();
+}
+
+// ═══════════════════════════════════
+// POLLING DATACAKE
+// ═══════════════════════════════════
+function pollDevice(device) {
+  var query = {
+    query: "{ allDevices { id lastHeard currentMeasurements { field { fieldName } value } } }"
+  };
+
+  return fetch("https://api.datacake.co/graphql/", {
+    method: "POST",
+    headers: {
+      "Authorization": "Token " + CONFIG.apiToken,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(query)
+  })
+  .then(function(r) {
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  })
+  .then(function(data) {
+    if (data.errors) return;
+    var allDevices = (data.data && data.data.allDevices) || [];
+    var deviceData = null;
+    for (var i = 0; i < allDevices.length; i++) {
+      if (allDevices[i].id === device.id) { deviceData = allDevices[i]; break; }
+    }
+    if (!deviceData) return;
+
+    var measurements = deviceData.currentMeasurements || [];
+    var field = null;
+    for (var j = 0; j < measurements.length; j++) {
+      if (measurements[j].field && measurements[j].field.fieldName === device.field) {
+        field = measurements[j]; break;
+      }
+    }
+    if (!field) return;
+
+    var val = field.value;
+    val = (val === 1 || val === true || val === "true" || val === "1");
+
+    var lastHeard = deviceData.lastHeard || null;
+    var s = state[device.id];
+    s.lastSeen = new Date().toLocaleTimeString("es-AR");
+
+    if (!s.initialized) {
+      s.initialized = true;
+      s.lastHeardSeen = lastHeard;
+      s.lastValue = val;
+      return;
+    }
+
+    var newMessage = (lastHeard && lastHeard !== s.lastHeardSeen);
+    var risingEdge = (val === true && s.lastValue === false);
+
+    s.lastHeardSeen = lastHeard;
+    s.lastValue = val;
+
+    if (val === true && !s.alerting && (newMessage || risingEdge)) {
+      startAlert(device);
+    }
+
+    var card = document.querySelector('#device-list .device-card:nth-child(' + (CONFIG.devices.indexOf(device)+1) + ') .device-last');
+    if (card) card.textContent = 'Visto: ' + s.lastSeen;
+  })
+  .catch(function(e) {
+    document.getElementById('conn-dot').className = 'status-dot';
+    document.getElementById('conn-label').textContent = 'ERROR';
+  });
+}
+
+function poll() {
+  document.getElementById('spinner').classList.add('active');
+  CONFIG.devices.forEach(function(d) { pollDevice(d); });
+  setTimeout(function() {
+    document.getElementById('spinner').classList.remove('active');
+    document.getElementById('last-poll').textContent = new Date().toLocaleTimeString('es-AR');
+    document.getElementById('conn-dot').className = 'status-dot online';
+    document.getElementById('conn-label').textContent = 'CONECTADO';
+  }, 1500);
+}
+
+poll();
+setInterval(poll, CONFIG.pollInterval);
+</script>
+</body>
+</html>
