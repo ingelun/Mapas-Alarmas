@@ -59,5 +59,245 @@
   .timer-display{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(255,59,92,0.15);border:1px solid var(--danger);border-radius:99px;padding:7px 20px;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--danger);z-index:2000;display:none;backdrop-filter:blur(8px);}
   .timer-display.visible{display:block;}
   .marker-pulse{width:40px;height:40px;border-radius:50%;background:var(--danger);border:3px solid white;box-shadow:0 0 0 0 rgba(255,59,92,0.7);animation:marker-ring 1s ease infinite;display:flex;align-items:center;justify-content:center;font-size:18px;}
-  @keyframes marker-ring{0%{box-shadow:0 0 0 0 rgba(255,59,92,0.7);}70%{box-shadow:0 0 0
+  @keyframes marker-ring{0%{box-shadow:0 0 0 0 rgba(255,59,92,0.7);}70%{box-shadow:0 0 0 16px rgba(255,59,92,0);}100%{box-shadow:0 0 0 0 rgba(255,59,92,0);}}
+  .marker-ok{width:32px;height:32px;border-radius:50%;background:var(--success);border:2px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;opacity:0.7;}
+  .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:4px 8px;}
+  .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1400;}
+  .overlay.visible{display:block;}
+  @media(max-width:768px){
+    .hamburger{display:block;}
+    .logo{font-size:13px;}
+    .topbar{padding:10px 14px;}
+    .sidebar{position:fixed;left:0;top:52px;bottom:0;z-index:1500;transform:translateX(-100%);transition:transform 0.3s ease;width:280px;}
+    .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,0.5);}
+    #map{width:100%;}
+    .alert-panel{width:calc(100% - 32px);right:16px;}
+    .timer-display{font-size:11px;padding:5px 14px;bottom:10px;}
+  }
+</style>
+</head>
+<body>
+<div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+<div class="topbar">
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="hamburger" onclick="toggleSidebar()">☰</button>
+    <div class="logo">ALARM<span>MAP</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <div class="status-item">
+      <div class="status-dot online" id="conn-dot"></div>
+      <span id="conn-label">CONECTADO</span>
+    </div>
+    <div class="status-item">
+      <div class="spinner" id="spinner"></div>
+      <span>cada 5s</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)" id="last-poll">—</div>
+    <button id="admin-btn" onclick="adminLogin()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace">🔒 Admin</button>
+  </div>
+</div>
+<div class="main">
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-title">// dispositivos</div>
+    <div class="device-list" id="device-list"></div>
+    <div class="config-panel">
+      <div class="config-row"><span>POLL</span><span class="config-val">5s</span></div>
+      <div class="config-row"><span>ALERTA</span><span class="config-val" id="cfg-timeout">30s</span></div>
+      <div class="config-row"><span>DEVICES</span><span class="config-val" id="cfg-devices">—</span></div>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+<div class="alert-panel" id="alert-panel"></div>
+<div class="timer-display" id="timer-display">⏱ <span id="timer-val">30</span>s</div>
+<script>
+var CONFIG = {
+  apiToken:      "ef34e5f138248b50aa33fe77da33c129351e83fb",
+  adminPassword: "admin123",
+  alertDuration: 30,
+  pollInterval:  5000,
+  devices: []
+};
+
+var isAdmin = false;
+var state = {};
+
+var map = L.map('map', { center:[-31.428298,-64.216270], zoom:13, attributionControl:false });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
+
+function makeOkIcon() { return L.divIcon({ html:'<div style="width:0;height:0"></div>', className:'', iconSize:[0,0], iconAnchor:[0,0] }); }
+function makeVisibleIcon() { return L.divIcon({ html:'<div class="marker-ok">📍</div>', className:'', iconSize:[32,32], iconAnchor:[16,16] }); }
+function makeAlertIcon() { return L.divIcon({ html:'<div class="marker-pulse">🔔</div>', className:'', iconSize:[40,40], iconAnchor:[20,20] }); }
+
+function addDevice(id, name, lat, lng) {
+  var label = "B" + (CONFIG.devices.length + 1);
+  CONFIG.devices.push({ id:id, name:name, field:"BUTTON_PRESS", lat:lat, lng:lng, label:label });
+  state[id] = { alerting:false, alertStart:null, marker:null, toast:null, timerInterval:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
+  var marker = L.marker([lat, lng], { icon:makeOkIcon() }).addTo(map);
+  marker.bindPopup('<b>' + name + '</b><br>Sin alertas');
+  state[id].marker = marker;
+  document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
+}
+
+document.getElementById('cfg-timeout').textContent = CONFIG.alertDuration + 's';
+document.getElementById('cfg-devices').textContent = '...';
+
+function loadDevices() {
+  fetch("https://api.datacake.co/graphql/", {
+    method:"POST",
+    headers:{"Authorization":"Token " + CONFIG.apiToken,"Content-Type":"application/json"},
+    body:JSON.stringify({ query:"{ allDevices { id verboseName currentMeasurements { field { fieldName } value } } }" })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    var devices = (data.data && data.data.allDevices) || [];
+    devices.forEach(function(dev) {
+      var lat=null, lng=null;
+      (dev.currentMeasurements||[]).forEach(function(m) {
+        if (m.field && m.field.fieldName==="LAT") lat=m.value;
+        if (m.field && m.field.fieldName==="LNG") lng=m.value;
+      });
+      if (lat && lng && lat!==0 && lng!==0) addDevice(dev.id, dev.verboseName, lat, lng);
+    });
+    renderSidebar();
+  })
+  .catch(function(e){ console.warn("Error cargando devices:", e); });
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('visible');
+}
+
+function renderSidebar() {
+  var list = document.getElementById('device-list');
+  list.innerHTML = '';
+  CONFIG.devices.forEach(function(d) {
+    var s = state[d.id];
+    var card = document.createElement('div');
+    card.className = 'device-card' + (s.alerting ? ' alerting' : '');
+    card.onclick = function() { map.setView([d.lat, d.lng], 16); if(window.innerWidth<=768) toggleSidebar(); };
+    var eyeBtn = isAdmin ? '<button onclick="locateDevice(event,\'' + d.id + '\')" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;margin-top:6px">👁 ubicar</button>' : '';
+    card.innerHTML =
+      '<div class="device-name">' + d.label + ' <span class="device-status-badge ' + (s.alerting?'badge-active':'badge-ok') + '">' + (s.alerting?'⚠ ACTIVO':'✓ OK') + '</span></div>' +
+      '<div style="font-size:13px;color:var(--text)">' + d.name + '</div>' +
+      (isAdmin ? '<div class="device-coords">' + d.lat.toFixed(5) + ', ' + d.lng.toFixed(5) + '</div>' : '') +
+      '<div class="device-last">' + (s.lastSeen ? 'Visto: '+s.lastSeen : 'Sin datos aún') + '</div>' +
+      '<div class="device-timer" id="timer-card-' + d.id + '">⏱ expira en <span id="tval-' + d.id + '">—</span>s</div>' + eyeBtn;
+    list.appendChild(card);
+  });
+}
+renderSidebar();
+
+function startAlert(device) {
+  var s = state[device.id];
+  if (s.alerting) return;
+  s.alerting = true;
+  s.marker.setIcon(makeAlertIcon());
+  s.marker.bindPopup('<b style="color:#ff3b5c">⚠ ALERTA</b><br>' + device.name).openPopup();
+  var toast = document.createElement('div');
+  toast.className = 'alert-toast';
+  toast.innerHTML = '<div class="toast-title">🔴 ' + device.label + ' — ALERTA</div><div class="toast-body">' + device.name + '</div><div class="toast-countdown"><div class="toast-bar" id="tbar-' + device.id + '" style="width:100%"></div></div>';
+  document.getElementById('alert-panel').appendChild(toast);
+  s.toast = toast;
+  document.getElementById('timer-display').classList.add('visible');
+  var remaining = CONFIG.alertDuration;
+  document.getElementById('timer-val').textContent = remaining;
+  s.timerInterval = setInterval(function() {
+    remaining--;
+    var bar = document.getElementById('tbar-' + device.id);
+    if (bar) bar.style.width = (remaining/CONFIG.alertDuration*100)+'%';
+    document.getElementById('timer-val').textContent = remaining;
+    var tval = document.getElementById('tval-' + device.id);
+    if (tval) tval.textContent = remaining;
+    if (remaining<=0) { clearInterval(s.timerInterval); endAlert(device); }
+  }, 1000);
+  renderSidebar();
+}
+
+function endAlert(device) {
+  var s = state[device.id];
+  s.alerting = false;
+  s.marker.setIcon(makeOkIcon());
+  s.marker.closePopup();
+  if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
+  s.toast = null;
+  var anyAlert = CONFIG.devices.some(function(d){ return state[d.id].alerting; });
+  if (!anyAlert) document.getElementById('timer-display').classList.remove('visible');
+  renderSidebar();
+}
+
+function pollDevice(device) {
+  return fetch("https://api.datacake.co/graphql/", {
+    method:"POST",
+    headers:{"Authorization":"Token " + CONFIG.apiToken,"Content-Type":"application/json"},
+    body:JSON.stringify({ query:"{ allDevices { id lastHeard currentMeasurements { field { fieldName } value } } }" })
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    var allDevices = (data.data && data.data.allDevices) || [];
+    var deviceData = null;
+    for (var i=0; i<allDevices.length; i++) { if (allDevices[i].id===device.id) { deviceData=allDevices[i]; break; } }
+    if (!deviceData) return;
+    var measurements = deviceData.currentMeasurements || [];
+    var field = null;
+    for (var j=0; j<measurements.length; j++) { if (measurements[j].field && measurements[j].field.fieldName===device.field) { field=measurements[j]; break; } }
+    if (!field) return;
+    var val = (field.value===1||field.value===true||field.value==="true"||field.value==="1");
+    var lastHeard = deviceData.lastHeard || null;
+    var s = state[device.id];
+    s.lastSeen = new Date().toLocaleTimeString("es-AR");
+    if (!s.initialized) { s.initialized=true; s.lastHeardSeen=lastHeard; s.lastValue=val; return; }
+    var newMessage = (lastHeard && lastHeard!==s.lastHeardSeen);
+    var risingEdge = (val===true && s.lastValue===false);
+    s.lastHeardSeen = lastHeard;
+    s.lastValue = val;
+    if (val===true && !s.alerting && (newMessage||risingEdge)) startAlert(device);
+  })
+  .catch(function(e){
+    document.getElementById('conn-dot').className='status-dot';
+    document.getElementById('conn-label').textContent='ERROR';
+  });
+}
+
+function poll() {
+  document.getElementById('spinner').classList.add('active');
+  CONFIG.devices.forEach(function(d){ pollDevice(d); });
+  setTimeout(function() {
+    document.getElementById('spinner').classList.remove('active');
+    document.getElementById('last-poll').textContent = new Date().toLocaleTimeString('es-AR');
+    document.getElementById('conn-dot').className='status-dot online';
+    document.getElementById('conn-label').textContent='CONECTADO';
+  }, 1500);
+}
+
+function locateDevice(e, deviceId) {
+  e.stopPropagation();
+  var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
+  if (!device) return;
+  var s = state[deviceId];
+  map.setView([device.lat, device.lng], 17);
+  s.marker.setIcon(makeVisibleIcon());
+  s.marker.bindPopup('<b>' + device.name + '</b><br>📍 Ubicación').openPopup();
+  setTimeout(function() { if (!s.alerting) { s.marker.setIcon(makeOkIcon()); s.marker.closePopup(); } }, 5000);
+}
+
+function adminLogin() {
+  var pwd = prompt("Contraseña de administrador:");
+  if (pwd===CONFIG.adminPassword) {
+    isAdmin=true;
+    document.getElementById('admin-btn').textContent='🔓 Admin';
+    document.getElementById('admin-btn').style.color='var(--success)';
+    renderSidebar();
+  } else if (pwd!==null) {
+    alert("Contraseña incorrecta");
+  }
+}
+
+loadDevices();
+setTimeout(function(){ poll(); setInterval(poll, CONFIG.pollInterval); }, 2000);
+</script>
+</body>
 </html>
