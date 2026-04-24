@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -103,53 +103,28 @@
 
 <script>
 // ═══════════════════════════════════
-// CONFIGURACIÓN — editá esto
+// CONFIGURACIÓN
 // ═══════════════════════════════════
 var CONFIG = {
-  apiToken: "ef34e5f138248b50aa33fe77da33c129351e83fb",
-  adminPassword: "admin123",   // cambiá esta contraseña
+  apiToken:      "ef34e5f138248b50aa33fe77da33c129351e83fb",
+  adminPassword: "admin123",
   alertDuration: 30,
-  pollInterval: 5000,
-  devices: [
-    {
-      id:    "9157714d-7ecb-4efd-87a4-4cfc0ec2fccb",
-      name:  "Botón 1 — Xiao1",
-      field: "BUTTON_PRESS",
-      lat:   -31.428298,
-      lng:   -64.216270,
-      label: "B1"
-    }
-    // Para agregar más botones copiar el bloque de arriba:
-    // { id: "DEVICE_ID_2", name: "Botón 2", field: "BUTTON_PRESS", lat: -31.43, lng: -64.22, label: "B2" }
-  ]
+  pollInterval:  5000,
+  devices: []   // se carga automáticamente desde Datacake
 };
 
 // ═══════════════════════════════════
 // ESTADO
 // ═══════════════════════════════════
 var isAdmin = false;
-
 var state = {};
-CONFIG.devices.forEach(function(d) {
-  state[d.id] = {
-    alerting: false,
-    alertStart: null,
-    marker: null,
-    toast: null,
-    timerInterval: null,
-    lastValue: null,
-    lastSeen: null,
-    lastHeardSeen: null,
-    initialized: false
-  };
-});
 
 // ═══════════════════════════════════
 // MAPA
 // ═══════════════════════════════════
 var map = L.map('map', {
-  center: [CONFIG.devices[0].lat, CONFIG.devices[0].lng],
-  zoom: 15,
+  center: [-31.428298, -64.216270],
+  zoom: 13,
   attributionControl: false
 });
 
@@ -165,14 +140,54 @@ function makeAlertIcon() {
   return L.divIcon({ html:'<div class="marker-pulse">🔔</div>', className:'', iconSize:[40,40], iconAnchor:[20,20] });
 }
 
-CONFIG.devices.forEach(function(d) {
-  var marker = L.marker([d.lat, d.lng], { icon: makeOkIcon() }).addTo(map);
-  marker.bindPopup('<b>' + d.name + '</b><br>Sin alertas');
-  state[d.id].marker = marker;
-});
+function addDevice(id, name, lat, lng) {
+  var label = "B" + (CONFIG.devices.length + 1);
+  CONFIG.devices.push({ id:id, name:name, field:"BUTTON_PRESS", lat:lat, lng:lng, label:label });
+  state[id] = {
+    alerting: false, alertStart: null, marker: null, toast: null,
+    timerInterval: null, lastValue: null, lastSeen: null,
+    lastHeardSeen: null, initialized: false
+  };
+  var marker = L.marker([lat, lng], { icon: makeOkIcon() }).addTo(map);
+  marker.bindPopup('<b>' + name + '</b><br>Sin alertas');
+  state[id].marker = marker;
+  document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
+}
 
-document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
 document.getElementById('cfg-timeout').textContent = CONFIG.alertDuration + 's';
+document.getElementById('cfg-devices').textContent = '...';
+
+// Cargar devices desde Datacake
+function loadDevices() {
+  var query = {
+    query: "{ allDevices { id verboseName currentMeasurements { field { fieldName } value } } }"
+  };
+  fetch("https://api.datacake.co/graphql/", {
+    method: "POST",
+    headers: { "Authorization": "Token " + CONFIG.apiToken, "Content-Type": "application/json" },
+    body: JSON.stringify(query)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var devices = (data.data && data.data.allDevices) || [];
+    devices.forEach(function(dev) {
+      var lat = null, lng = null;
+      var measurements = dev.currentMeasurements || [];
+      measurements.forEach(function(m) {
+        if (m.field && m.field.fieldName === "LAT") lat = m.value;
+        if (m.field && m.field.fieldName === "LNG") lng = m.value;
+      });
+      if (lat && lng && lat !== 0 && lng !== 0) {
+        addDevice(dev.id, dev.verboseName, lat, lng);
+      }
+    });
+    renderSidebar();
+    console.log("Devices cargados:", CONFIG.devices.length);
+  })
+  .catch(function(e) {
+    console.warn("Error cargando devices:", e);
+  });
+}
 
 // ═══════════════════════════════════
 // SIDEBAR
@@ -364,8 +379,11 @@ function adminLogin() {
   }
 }
 
-poll();
-setInterval(poll, CONFIG.pollInterval);
+loadDevices();
+setTimeout(function() {
+  poll();
+  setInterval(poll, CONFIG.pollInterval);
+}, 2000);
 </script>
 </body>
 </html>
