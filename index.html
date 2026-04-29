@@ -64,13 +64,13 @@
   .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:4px 8px;}
   .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1400;}
   .overlay.visible{display:block;}
-  /* Tooltip de alerta */
   .alert-tooltip{
     background:rgba(255,59,92,0.15) !important;
     border:1px solid #ff3b5c !important;
     color:#ff3b5c !important;
     font-family:'Barlow',sans-serif !important;
     font-weight:700 !important;
+    white-space:nowrap;
   }
   .alert-tooltip::before{
     border-top-color:#ff3b5c !important;
@@ -150,7 +150,7 @@ function addDevice(id, name, lat, lng) {
   CONFIG.devices.push({ id:id, name:name, field:"BUTTON_PRESS", lat:lat, lng:lng, label:label });
   state[id] = { alerting:false, marker:null, toast:null, timerInterval:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
   var marker = L.marker([lat, lng], { icon:makeOkIcon() }).addTo(map);
-  marker.bindTooltip('<b>' + name + '</b>', { permanent:false, direction:'top' });
+  marker.bindTooltip('<b>' + name + '</b>', { permanent:false, direction:'top', offset:[0, -10] });
   state[id].marker = marker;
   document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
 }
@@ -223,7 +223,7 @@ function startAlert(device) {
   s.marker.setIcon(makeAlertIcon());
   s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>⚠ ' + device.name + '</b>', {
-    permanent:true, direction:'top', className:'alert-tooltip'
+    permanent:true, direction:'top', className:'alert-tooltip', offset:[0, -30]
   }).openTooltip();
   var toast = document.createElement('div');
   toast.className = 'alert-toast';
@@ -250,7 +250,7 @@ function endAlert(device) {
   s.alerting = false;
   s.marker.setIcon(makeOkIcon());
   s.marker.unbindTooltip();
-  s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top' });
+  s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top', offset:[0, -10] });
   if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
   s.toast = null;
   var anyAlert = CONFIG.devices.some(function(d){ return state[d.id].alerting; });
@@ -310,12 +310,12 @@ function locateDevice(e, deviceId) {
   map.setView([device.lat, device.lng], 17);
   s.marker.setIcon(makeVisibleIcon());
   s.marker.unbindTooltip();
-  s.marker.bindTooltip('<b>' + device.name + '</b><br>📍 Ubicación', { permanent:true, direction:'top' }).openTooltip();
+  s.marker.bindTooltip('<b>' + device.name + '</b><br>📍 Ubicación', { permanent:true, direction:'top', offset:[0,-10] }).openTooltip();
   setTimeout(function() {
     if (!s.alerting) {
       s.marker.setIcon(makeOkIcon());
       s.marker.unbindTooltip();
-      s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top' });
+      s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top', offset:[0,-10] });
     }
   }, 5000);
 }
