@@ -64,6 +64,17 @@
   .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:4px 8px;}
   .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1400;}
   .overlay.visible{display:block;}
+  /* Tooltip de alerta */
+  .alert-tooltip{
+    background:rgba(255,59,92,0.15) !important;
+    border:1px solid #ff3b5c !important;
+    color:#ff3b5c !important;
+    font-family:'Barlow',sans-serif !important;
+    font-weight:700 !important;
+  }
+  .alert-tooltip::before{
+    border-top-color:#ff3b5c !important;
+  }
   @media(max-width:768px){
     .hamburger{display:block;}
     .logo{font-size:13px;}
@@ -127,7 +138,6 @@ var CONFIG = {
 var isAdmin = false;
 var state = {};
 
-// Mapa sin centro fijo — se ajusta automáticamente a los devices
 var map = L.map('map', { attributionControl:false });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
 
@@ -138,9 +148,9 @@ function makeAlertIcon() { return L.divIcon({ html:'<div class="marker-pulse">�
 function addDevice(id, name, lat, lng) {
   var label = "B" + (CONFIG.devices.length + 1);
   CONFIG.devices.push({ id:id, name:name, field:"BUTTON_PRESS", lat:lat, lng:lng, label:label });
-  state[id] = { alerting:false, alertStart:null, marker:null, toast:null, timerInterval:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
+  state[id] = { alerting:false, marker:null, toast:null, timerInterval:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
   var marker = L.marker([lat, lng], { icon:makeOkIcon() }).addTo(map);
-  marker.bindPopup('<b>' + name + '</b><br>Sin alertas');
+  marker.bindTooltip('<b>' + name + '</b>', { permanent:false, direction:'top' });
   state[id].marker = marker;
   document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
 }
@@ -211,7 +221,10 @@ function startAlert(device) {
   if (s.alerting) return;
   s.alerting = true;
   s.marker.setIcon(makeAlertIcon());
-  s.marker.bindPopup('<b style="color:#ff3b5c">⚠ ALERTA</b><br>' + device.name).openPopup();
+  s.marker.unbindTooltip();
+  s.marker.bindTooltip('<b>⚠ ' + device.name + '</b>', {
+    permanent:true, direction:'top', className:'alert-tooltip'
+  }).openTooltip();
   var toast = document.createElement('div');
   toast.className = 'alert-toast';
   toast.innerHTML = '<div class="toast-title">🔴 ' + device.label + ' — ALERTA</div><div class="toast-body">' + device.name + '</div><div class="toast-countdown"><div class="toast-bar" id="tbar-' + device.id + '" style="width:100%"></div></div>';
@@ -226,13 +239,6 @@ function startAlert(device) {
     if (bar) bar.style.width = (remaining/CONFIG.alertDuration*100)+'%';
     var tval = document.getElementById('tval-' + device.id);
     if (tval) tval.textContent = remaining;
-    // Actualizar timer global con el mayor tiempo restante
-    var maxRemaining = 0;
-    CONFIG.devices.forEach(function(d) {
-      if (state[d.id].alerting && state[d.id].timerInterval) {
-        // approximation — usamos el toast bar para leer
-      }
-    });
     document.getElementById('timer-val').textContent = remaining;
     if (remaining<=0) { clearInterval(s.timerInterval); endAlert(device); }
   }, 1000);
@@ -243,7 +249,8 @@ function endAlert(device) {
   var s = state[device.id];
   s.alerting = false;
   s.marker.setIcon(makeOkIcon());
-  s.marker.closePopup();
+  s.marker.unbindTooltip();
+  s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top' });
   if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
   s.toast = null;
   var anyAlert = CONFIG.devices.some(function(d){ return state[d.id].alerting; });
@@ -302,8 +309,15 @@ function locateDevice(e, deviceId) {
   var s = state[deviceId];
   map.setView([device.lat, device.lng], 17);
   s.marker.setIcon(makeVisibleIcon());
-  s.marker.bindPopup('<b>' + device.name + '</b><br>📍 Ubicación').openPopup();
-  setTimeout(function() { if (!s.alerting) { s.marker.setIcon(makeOkIcon()); s.marker.closePopup(); } }, 5000);
+  s.marker.unbindTooltip();
+  s.marker.bindTooltip('<b>' + device.name + '</b><br>📍 Ubicación', { permanent:true, direction:'top' }).openTooltip();
+  setTimeout(function() {
+    if (!s.alerting) {
+      s.marker.setIcon(makeOkIcon());
+      s.marker.unbindTooltip();
+      s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top' });
+    }
+  }, 5000);
 }
 
 function adminLogin() {
