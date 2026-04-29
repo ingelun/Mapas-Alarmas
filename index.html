@@ -223,7 +223,7 @@ function startAlert(device) {
   s.marker.setIcon(makeAlertIcon());
   s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>⚠ ' + device.name + '</b>', {
-    permanent:true, direction:'top', className:'alert-tooltip', offset:[0, -30]
+    permanent:true, direction:'top', className:'alert-tooltip', offset:[0, -25]
   }).openTooltip();
   var toast = document.createElement('div');
   toast.className = 'alert-toast';
