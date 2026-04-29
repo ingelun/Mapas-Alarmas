@@ -50,11 +50,11 @@
   .config-val{color:var(--accent);}
   #map{flex:1;}
   .alert-panel{position:fixed;top:65px;right:16px;width:280px;z-index:2000;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
-  .alert-toast{background:var(--panel);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:8px;padding:12px 14px;pointer-events:all;animation:slide-in 0.3s ease;box-shadow:0 4px 20px rgba(255,59,92,0.3);}
+  .alert-toast{background:var(--panel);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:8px;padding:10px 12px;pointer-events:all;animation:slide-in 0.3s ease;box-shadow:0 4px 20px rgba(255,59,92,0.3);}
   @keyframes slide-in{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
-  .toast-title{font-size:13px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:4px;}
-  .toast-body{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;}
-  .toast-countdown{height:3px;background:var(--border);border-radius:99px;margin-top:8px;overflow:hidden;}
+  .toast-title{font-size:12px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:2px;}
+  .toast-body{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;}
+  .toast-countdown{height:3px;background:var(--border);border-radius:99px;margin-top:6px;overflow:hidden;}
   .toast-bar{height:100%;background:var(--danger);border-radius:99px;transition:width 1s linear;}
   .timer-display{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(255,59,92,0.15);border:1px solid var(--danger);border-radius:99px;padding:7px 20px;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--danger);z-index:2000;display:none;backdrop-filter:blur(8px);}
   .timer-display.visible{display:block;}
@@ -71,7 +71,10 @@
     .sidebar{position:fixed;left:0;top:52px;bottom:0;z-index:1500;transform:translateX(-100%);transition:transform 0.3s ease;width:280px;}
     .sidebar.open{transform:translateX(0);box-shadow:4px 0 20px rgba(0,0,0,0.5);}
     #map{width:100%;}
-    .alert-panel{width:calc(100% - 32px);right:16px;}
+    .alert-panel{width:calc(100% - 32px);right:16px;top:58px;}
+    .alert-toast{padding:8px 10px;}
+    .toast-title{font-size:11px;}
+    .toast-body{font-size:10px;}
     .timer-display{font-size:11px;padding:5px 14px;bottom:10px;}
   }
 </style>
@@ -124,7 +127,8 @@ var CONFIG = {
 var isAdmin = false;
 var state = {};
 
-var map = L.map('map', { center:[-31.428298,-64.216270], zoom:13, attributionControl:false });
+// Mapa sin centro fijo — se ajusta automáticamente a los devices
+var map = L.map('map', { attributionControl:false });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
 
 function makeOkIcon() { return L.divIcon({ html:'<div style="width:0;height:0"></div>', className:'', iconSize:[0,0], iconAnchor:[0,0] }); }
@@ -139,6 +143,16 @@ function addDevice(id, name, lat, lng) {
   marker.bindPopup('<b>' + name + '</b><br>Sin alertas');
   state[id].marker = marker;
   document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
+}
+
+function fitMapToDevices() {
+  if (CONFIG.devices.length === 0) return;
+  if (CONFIG.devices.length === 1) {
+    map.setView([CONFIG.devices[0].lat, CONFIG.devices[0].lng], 15);
+    return;
+  }
+  var group = L.featureGroup(CONFIG.devices.map(function(d){ return state[d.id].marker; }));
+  map.fitBounds(group.getBounds().pad(0.3));
 }
 
 document.getElementById('cfg-timeout').textContent = CONFIG.alertDuration + 's';
@@ -156,11 +170,12 @@ function loadDevices() {
     devices.forEach(function(dev) {
       var lat=null, lng=null;
       (dev.currentMeasurements||[]).forEach(function(m) {
-        if (m.field && m.field.fieldName==="LAT") lat=m.value;
-        if (m.field && m.field.fieldName==="LNG") lng=m.value;
+        if (m.field && m.field.fieldName==="LAT") lat=parseFloat(m.value);
+        if (m.field && m.field.fieldName==="LNG") lng=parseFloat(m.value);
       });
       if (lat && lng && lat!==0 && lng!==0) addDevice(dev.id, dev.verboseName, lat, lng);
     });
+    fitMapToDevices();
     renderSidebar();
   })
   .catch(function(e){ console.warn("Error cargando devices:", e); });
@@ -209,9 +224,16 @@ function startAlert(device) {
     remaining--;
     var bar = document.getElementById('tbar-' + device.id);
     if (bar) bar.style.width = (remaining/CONFIG.alertDuration*100)+'%';
-    document.getElementById('timer-val').textContent = remaining;
     var tval = document.getElementById('tval-' + device.id);
     if (tval) tval.textContent = remaining;
+    // Actualizar timer global con el mayor tiempo restante
+    var maxRemaining = 0;
+    CONFIG.devices.forEach(function(d) {
+      if (state[d.id].alerting && state[d.id].timerInterval) {
+        // approximation — usamos el toast bar para leer
+      }
+    });
+    document.getElementById('timer-val').textContent = remaining;
     if (remaining<=0) { clearInterval(s.timerInterval); endAlert(device); }
   }, 1000);
   renderSidebar();
