@@ -49,32 +49,23 @@
   .config-row{display:flex;justify-content:space-between;margin-bottom:5px;}
   .config-val{color:var(--accent);}
   #map{flex:1;}
-  .alert-panel{position:fixed;top:65px;right:16px;width:280px;z-index:2000;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
-  .alert-toast{background:var(--panel);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:8px;padding:10px 12px;pointer-events:all;animation:slide-in 0.3s ease;box-shadow:0 4px 20px rgba(255,59,92,0.3);}
+  .alert-panel{position:fixed;top:65px;right:16px;width:300px;z-index:2000;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+  .alert-toast{background:var(--panel);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:8px;padding:12px 14px;pointer-events:all;animation:slide-in 0.3s ease;box-shadow:0 4px 20px rgba(255,59,92,0.3);}
   @keyframes slide-in{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
-  .toast-title{font-size:12px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:2px;}
-  .toast-body{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;}
-  .toast-countdown{height:3px;background:var(--border);border-radius:99px;margin-top:6px;overflow:hidden;}
-  .toast-bar{height:100%;background:var(--danger);border-radius:99px;transition:width 1s linear;}
-  .timer-display{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:rgba(255,59,92,0.15);border:1px solid var(--danger);border-radius:99px;padding:7px 20px;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--danger);z-index:2000;display:none;backdrop-filter:blur(8px);}
-  .timer-display.visible{display:block;}
+  .toast-title{font-size:13px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:6px;}
+  .toast-body{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
+  .toast-time{font-size:11px;color:var(--warning);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
+  .toast-elapsed{font-size:11px;color:var(--accent);font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
+  .toast-btn{background:rgba(0,232,150,0.15);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-weight:700;width:100%;transition:all 0.2s;}
+  .toast-btn:hover{background:rgba(0,232,150,0.3);}
   .marker-pulse{width:40px;height:40px;border-radius:50%;background:var(--danger);border:3px solid white;box-shadow:0 0 0 0 rgba(255,59,92,0.7);animation:marker-ring 1s ease infinite;display:flex;align-items:center;justify-content:center;font-size:18px;}
   @keyframes marker-ring{0%{box-shadow:0 0 0 0 rgba(255,59,92,0.7);}70%{box-shadow:0 0 0 16px rgba(255,59,92,0);}100%{box-shadow:0 0 0 0 rgba(255,59,92,0);}}
   .marker-ok{width:32px;height:32px;border-radius:50%;background:var(--success);border:2px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;font-size:14px;opacity:0.7;}
+  .alert-tooltip{background:rgba(255,59,92,0.15)!important;border:1px solid #ff3b5c!important;color:#ff3b5c!important;font-family:'Barlow',sans-serif!important;font-weight:700!important;white-space:nowrap;}
+  .alert-tooltip::before{border-top-color:#ff3b5c!important;}
   .hamburger{display:none;background:none;border:none;color:var(--text);font-size:22px;cursor:pointer;padding:4px 8px;}
   .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1400;}
   .overlay.visible{display:block;}
-  .alert-tooltip{
-    background:rgba(255,59,92,0.15) !important;
-    border:1px solid #ff3b5c !important;
-    color:#ff3b5c !important;
-    font-family:'Barlow',sans-serif !important;
-    font-weight:700 !important;
-    white-space:nowrap;
-  }
-  .alert-tooltip::before{
-    border-top-color:#ff3b5c !important;
-  }
   @media(max-width:768px){
     .hamburger{display:block;}
     .logo{font-size:13px;}
@@ -85,8 +76,7 @@
     .alert-panel{width:calc(100% - 32px);right:16px;top:58px;}
     .alert-toast{padding:8px 10px;}
     .toast-title{font-size:11px;}
-    .toast-body{font-size:10px;}
-    .timer-display{font-size:11px;padding:5px 14px;bottom:10px;}
+    .toast-body,.toast-time,.toast-elapsed{font-size:10px;}
   }
 </style>
 </head>
@@ -118,19 +108,18 @@
     <div class="device-list" id="device-list"></div>
     <div class="config-panel">
       <div class="config-row"><span>POLL</span><span class="config-val">5s</span></div>
-      <div class="config-row"><span>ALERTA</span><span class="config-val" id="cfg-timeout">30s</span></div>
       <div class="config-row"><span>DEVICES</span><span class="config-val" id="cfg-devices">—</span></div>
+      <div class="config-row"><span>ALERTAS</span><span class="config-val" id="cfg-alerts">0</span></div>
     </div>
   </div>
   <div id="map"></div>
 </div>
 <div class="alert-panel" id="alert-panel"></div>
-<div class="timer-display" id="timer-display">⏱ <span id="timer-val">30</span>s</div>
 <script>
 var CONFIG = {
   apiToken:      "ef34e5f138248b50aa33fe77da33c129351e83fb",
   adminPassword: "admin123",
-  alertDuration: 30,
+  alertZoom:     13,
   pollInterval:  5000,
   devices: []
 };
@@ -145,27 +134,50 @@ function makeOkIcon() { return L.divIcon({ html:'<div style="width:0;height:0"><
 function makeVisibleIcon() { return L.divIcon({ html:'<div class="marker-ok">📍</div>', className:'', iconSize:[32,32], iconAnchor:[16,16] }); }
 function makeAlertIcon() { return L.divIcon({ html:'<div class="marker-pulse">🔔</div>', className:'', iconSize:[40,40], iconAnchor:[20,20] }); }
 
+function formatDateTime(isoString) {
+  if (!isoString) return '—';
+  var d = new Date(isoString);
+  var pad = function(n){ return n<10?'0'+n:n; };
+  return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+}
+
+function elapsedSeconds(isoString) {
+  if (!isoString) return 0;
+  return Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
+}
+
+function formatElapsed(secs) {
+  if (secs < 0) secs = 0;
+  var h = Math.floor(secs/3600);
+  var m = Math.floor((secs%3600)/60);
+  var s = secs%60;
+  var pad = function(n){ return n<10?'0'+n:n; };
+  if (h > 0) return pad(h)+':'+pad(m)+':'+pad(s);
+  return pad(m)+':'+pad(s);
+}
+
 function addDevice(id, name, lat, lng) {
   var label = "B" + (CONFIG.devices.length + 1);
   CONFIG.devices.push({ id:id, name:name, field:"BUTTON_PRESS", lat:lat, lng:lng, label:label });
-  state[id] = { alerting:false, marker:null, toast:null, timerInterval:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
+  state[id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
   var marker = L.marker([lat, lng], { icon:makeOkIcon() }).addTo(map);
-  marker.bindTooltip('<b>' + name + '</b>', { permanent:false, direction:'top', offset:[0, -10] });
+  marker.bindTooltip('<b>' + name + '</b>', { permanent:false, direction:'top', offset:[0,-10] });
   state[id].marker = marker;
   document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
 }
 
 function fitMapToDevices() {
   if (CONFIG.devices.length === 0) return;
-  if (CONFIG.devices.length === 1) {
-    map.setView([CONFIG.devices[0].lat, CONFIG.devices[0].lng], 15);
-    return;
-  }
+  if (CONFIG.devices.length === 1) { map.setView([CONFIG.devices[0].lat, CONFIG.devices[0].lng], 13); return; }
   var group = L.featureGroup(CONFIG.devices.map(function(d){ return state[d.id].marker; }));
   map.fitBounds(group.getBounds().pad(0.3));
 }
 
-document.getElementById('cfg-timeout').textContent = CONFIG.alertDuration + 's';
+function updateAlertCount() {
+  var count = CONFIG.devices.filter(function(d){ return state[d.id].alerting; }).length;
+  document.getElementById('cfg-alerts').textContent = count;
+}
+
 document.getElementById('cfg-devices').textContent = '...';
 
 function loadDevices() {
@@ -203,58 +215,86 @@ function renderSidebar() {
     var s = state[d.id];
     var card = document.createElement('div');
     card.className = 'device-card' + (s.alerting ? ' alerting' : '');
-    card.onclick = function() { map.setView([d.lat, d.lng], 16); if(window.innerWidth<=768) toggleSidebar(); };
-    var eyeBtn = isAdmin ? '<button onclick="locateDevice(event,\'' + d.id + '\')" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;margin-top:6px">👁 ubicar</button>' : '';
+    card.onclick = function() { map.flyTo([d.lat, d.lng], CONFIG.alertZoom, {duration:1.2}); if(window.innerWidth<=768) toggleSidebar(); };
+    var eyeBtn = isAdmin ? '<button onclick="locateDevice(event,\''+d.id+'\')" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;margin-top:6px">👁 ubicar</button>' : '';
+    var alertInfo = s.alerting && s.alertTimestamp ? '<div style="font-size:11px;color:var(--danger);font-family:\'Share Tech Mono\',monospace;margin-top:4px">🕐 '+formatDateTime(s.alertTimestamp)+'</div>' : '';
     card.innerHTML =
-      '<div class="device-name">' + d.label + ' <span class="device-status-badge ' + (s.alerting?'badge-active':'badge-ok') + '">' + (s.alerting?'⚠ ACTIVO':'✓ OK') + '</span></div>' +
-      '<div style="font-size:13px;color:var(--text)">' + d.name + '</div>' +
-      (isAdmin ? '<div class="device-coords">' + d.lat.toFixed(5) + ', ' + d.lng.toFixed(5) + '</div>' : '') +
-      '<div class="device-last">' + (s.lastSeen ? 'Visto: '+s.lastSeen : 'Sin datos aún') + '</div>' +
-      '<div class="device-timer" id="timer-card-' + d.id + '">⏱ expira en <span id="tval-' + d.id + '">—</span>s</div>' + eyeBtn;
+      '<div class="device-name">'+d.label+' <span class="device-status-badge '+(s.alerting?'badge-active':'badge-ok')+'">'+(s.alerting?'⚠ ACTIVO':'✓ OK')+'</span></div>'+
+      '<div style="font-size:13px;color:var(--text)">'+d.name+'</div>'+
+      (isAdmin ? '<div class="device-coords">'+d.lat.toFixed(5)+', '+d.lng.toFixed(5)+'</div>' : '')+
+      '<div class="device-last">'+(s.lastSeen ? 'Visto: '+s.lastSeen : 'Sin datos aún')+'</div>'+
+      alertInfo+
+      '<div class="device-timer" id="timer-card-'+d.id+'">⏱ <span id="tval-'+d.id+'">—</span></div>'+
+      eyeBtn;
     list.appendChild(card);
   });
+  updateAlertCount();
 }
 renderSidebar();
 
-function startAlert(device) {
+function startAlert(device, timestamp) {
   var s = state[device.id];
   if (s.alerting) return;
   s.alerting = true;
+  s.alertTimestamp = timestamp;
   s.marker.setIcon(makeAlertIcon());
   s.marker.unbindTooltip();
-  s.marker.bindTooltip('<b>⚠ ' + device.name + '</b>', {
-    permanent:true, direction:'top', className:'alert-tooltip', offset:[0, -25]
-  }).openTooltip();
+  s.marker.bindTooltip('<b>⚠ '+device.name+'</b>', { permanent:true, direction:'top', className:'alert-tooltip', offset:[0,-30] }).openTooltip();
+  map.flyTo([device.lat, device.lng], CONFIG.alertZoom, { duration:1.5 });
   var toast = document.createElement('div');
   toast.className = 'alert-toast';
-  toast.innerHTML = '<div class="toast-title">🔴 ' + device.label + ' — ALERTA</div><div class="toast-body">' + device.name + '</div><div class="toast-countdown"><div class="toast-bar" id="tbar-' + device.id + '" style="width:100%"></div></div>';
+  toast.id = 'toast-' + device.id;
+  toast.innerHTML =
+    '<div class="toast-title">🔴 '+device.label+' — ALERTA</div>'+
+    '<div class="toast-body">📍 '+device.name+'</div>'+
+    '<div class="toast-time">🕐 Inicio: '+formatDateTime(timestamp)+'</div>'+
+    '<div class="toast-elapsed" id="elapsed-'+device.id+'">⏱ Transcurrido: 00:00</div>'+
+    '<button class="toast-btn" onclick="acknowledgeAlert(\''+device.id+'\')">✅ Marcar como Atendida</button>';
   document.getElementById('alert-panel').appendChild(toast);
   s.toast = toast;
-  document.getElementById('timer-display').classList.add('visible');
-  var remaining = CONFIG.alertDuration;
-  document.getElementById('timer-val').textContent = remaining;
-  s.timerInterval = setInterval(function() {
-    remaining--;
-    var bar = document.getElementById('tbar-' + device.id);
-    if (bar) bar.style.width = (remaining/CONFIG.alertDuration*100)+'%';
+  s.tickInterval = setInterval(function() {
+    var secs = elapsedSeconds(s.alertTimestamp);
+    var el = document.getElementById('elapsed-' + device.id);
+    if (el) el.textContent = '⏱ Transcurrido: ' + formatElapsed(secs);
     var tval = document.getElementById('tval-' + device.id);
-    if (tval) tval.textContent = remaining;
-    document.getElementById('timer-val').textContent = remaining;
-    if (remaining<=0) { clearInterval(s.timerInterval); endAlert(device); }
+    if (tval) tval.textContent = formatElapsed(secs);
   }, 1000);
+  setTimeout(function() {
+    var alertingDevices = CONFIG.devices.filter(function(d){ return state[d.id].alerting; });
+    if (alertingDevices.length > 1) {
+      var group = L.featureGroup(alertingDevices.map(function(d){ return state[d.id].marker; }));
+      map.flyToBounds(group.getBounds().pad(0.4), { duration:1.5 });
+    }
+  }, 500);
   renderSidebar();
+}
+
+function acknowledgeAlert(deviceId) {
+  var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
+  if (device) endAlert(device);
 }
 
 function endAlert(device) {
   var s = state[device.id];
+  if (!s.alerting) return;
   s.alerting = false;
+  s.alertTimestamp = null;
+  clearInterval(s.tickInterval);
+  s.tickInterval = null;
   s.marker.setIcon(makeOkIcon());
   s.marker.unbindTooltip();
-  s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top', offset:[0, -10] });
+  s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
   if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
   s.toast = null;
-  var anyAlert = CONFIG.devices.some(function(d){ return state[d.id].alerting; });
-  if (!anyAlert) document.getElementById('timer-display').classList.remove('visible');
+  var alertingDevices = CONFIG.devices.filter(function(d){ return state[d.id].alerting; });
+  if (alertingDevices.length > 1) {
+    var group = L.featureGroup(alertingDevices.map(function(d){ return state[d.id].marker; }));
+    map.flyToBounds(group.getBounds().pad(0.4), { duration:1.2 });
+  } else if (alertingDevices.length === 1) {
+    map.flyTo([alertingDevices[0].lat, alertingDevices[0].lng], CONFIG.alertZoom, { duration:1.2 });
+  } else {
+    fitMapToDevices();
+  }
   renderSidebar();
 }
 
@@ -278,12 +318,18 @@ function pollDevice(device) {
     var lastHeard = deviceData.lastHeard || null;
     var s = state[device.id];
     s.lastSeen = new Date().toLocaleTimeString("es-AR");
-    if (!s.initialized) { s.initialized=true; s.lastHeardSeen=lastHeard; s.lastValue=val; return; }
-    var newMessage = (lastHeard && lastHeard!==s.lastHeardSeen);
-    var risingEdge = (val===true && s.lastValue===false);
+    if (!s.initialized) {
+      s.initialized = true;
+      s.lastHeardSeen = lastHeard;
+      s.lastValue = val;
+      if (val === true && lastHeard) startAlert(device, lastHeard);
+      return;
+    }
+    var newMessage = (lastHeard && lastHeard !== s.lastHeardSeen);
+    var risingEdge = (val === true && s.lastValue === false);
     s.lastHeardSeen = lastHeard;
     s.lastValue = val;
-    if (val===true && !s.alerting && (newMessage||risingEdge)) startAlert(device);
+    if (val === true && !s.alerting && (newMessage || risingEdge)) startAlert(device, lastHeard);
   })
   .catch(function(e){
     document.getElementById('conn-dot').className='status-dot';
@@ -307,17 +353,19 @@ function locateDevice(e, deviceId) {
   var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
   if (!device) return;
   var s = state[deviceId];
-  map.setView([device.lat, device.lng], 17);
-  s.marker.setIcon(makeVisibleIcon());
-  s.marker.unbindTooltip();
-  s.marker.bindTooltip('<b>' + device.name + '</b><br>📍 Ubicación', { permanent:true, direction:'top', offset:[0,-10] }).openTooltip();
-  setTimeout(function() {
-    if (!s.alerting) {
-      s.marker.setIcon(makeOkIcon());
-      s.marker.unbindTooltip();
-      s.marker.bindTooltip('<b>' + device.name + '</b>', { permanent:false, direction:'top', offset:[0,-10] });
-    }
-  }, 5000);
+  map.flyTo([device.lat, device.lng], 16, { duration:1.2 });
+  if (!s.alerting) {
+    s.marker.setIcon(makeVisibleIcon());
+    s.marker.unbindTooltip();
+    s.marker.bindTooltip('<b>'+device.name+'</b><br>📍 Ubicación', { permanent:true, direction:'top', offset:[0,-10] }).openTooltip();
+    setTimeout(function() {
+      if (!s.alerting) {
+        s.marker.setIcon(makeOkIcon());
+        s.marker.unbindTooltip();
+        s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
+      }
+    }, 5000);
+  }
 }
 
 function adminLogin() {
