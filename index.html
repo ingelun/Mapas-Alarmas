@@ -161,7 +161,7 @@ function addDevice(id, name, lat, lng) {
   CONFIG.devices.push({ id:id, name:name, field:"BUTTON_PRESS", lat:lat, lng:lng, label:label });
   state[id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastValue:null, lastSeen:null, lastHeardSeen:null, initialized:false };
   var marker = L.marker([lat, lng], { icon:makeOkIcon() }).addTo(map);
-  marker.bindTooltip('<b>' + name + '</b>', { permanent:false, direction:'top', offset:[0,-10] });
+  marker.bindTooltip('<b>'+name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
   state[id].marker = marker;
   document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
 }
@@ -322,7 +322,13 @@ function pollDevice(device) {
       s.initialized = true;
       s.lastHeardSeen = lastHeard;
       s.lastValue = val;
-      if (val === true && lastHeard) startAlert(device, lastHeard);
+      // Solo activar alarma al cargar si el evento es reciente (menos de 5 minutos)
+      if (val === true && lastHeard) {
+        var secsAgo = elapsedSeconds(lastHeard);
+        if (secsAgo < 300) {
+          startAlert(device, lastHeard);
+        }
+      }
       return;
     }
     var newMessage = (lastHeard && lastHeard !== s.lastHeardSeen);
