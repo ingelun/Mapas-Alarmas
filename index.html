@@ -55,7 +55,8 @@
   .toast-title{font-size:13px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .toast-body{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
   .toast-time{font-size:11px;color:var(--warning);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
-  .toast-elapsed{font-size:11px;color:var(--accent);font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
+  .toast-elapsed{font-size:11px;color:var(--accent);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
+  .toast-remaining{font-size:11px;color:var(--warning);font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
   .toast-btn{background:rgba(0,232,150,0.15);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-weight:700;width:100%;transition:all 0.2s;}
   .toast-btn:hover{background:rgba(0,232,150,0.3);}
   .marker-pulse{width:40px;height:40px;border-radius:50%;background:var(--danger);border:3px solid white;box-shadow:0 0 0 0 rgba(255,59,92,0.7);animation:marker-ring 1s ease infinite;display:flex;align-items:center;justify-content:center;font-size:18px;}
@@ -76,7 +77,7 @@
     .alert-panel{width:calc(100% - 32px);right:16px;top:58px;}
     .alert-toast{padding:8px 10px;}
     .toast-title{font-size:11px;}
-    .toast-body,.toast-time,.toast-elapsed{font-size:10px;}
+    .toast-body,.toast-time,.toast-elapsed,.toast-remaining{font-size:10px;}
   }
 </style>
 </head>
@@ -110,6 +111,7 @@
       <div class="config-row"><span>POLL</span><span class="config-val">5s</span></div>
       <div class="config-row"><span>DEVICES</span><span class="config-val" id="cfg-devices">—</span></div>
       <div class="config-row"><span>ALERTAS</span><span class="config-val" id="cfg-alerts">0</span></div>
+      <div class="config-row"><span>DURACIÓN</span><span class="config-val" id="cfg-duration">—</span></div>
     </div>
   </div>
   <div id="map"></div>
@@ -121,6 +123,7 @@ var CONFIG = {
   adminPassword: "admin123",
   alertZoom:     13,
   pollInterval:  5000,
+  alertDuration: 300,  // segundos — cambiá a 3600 o 7200 para producción
   devices: []
 };
 
@@ -155,6 +158,9 @@ function formatElapsed(secs) {
   if (h > 0) return pad(h)+':'+pad(m)+':'+pad(s);
   return pad(m)+':'+pad(s);
 }
+
+// Mostrar duración configurada en sidebar
+document.getElementById('cfg-duration').textContent = formatElapsed(CONFIG.alertDuration);
 
 function addDevice(id, name, lat, lng) {
   var label = "B" + (CONFIG.devices.length + 1);
@@ -241,6 +247,7 @@ function startAlert(device, timestamp) {
   s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>⚠ '+device.name+'</b>', { permanent:true, direction:'top', className:'alert-tooltip', offset:[0,-30] }).openTooltip();
   map.flyTo([device.lat, device.lng], CONFIG.alertZoom, { duration:1.5 });
+
   var toast = document.createElement('div');
   toast.className = 'alert-toast';
   toast.id = 'toast-' + device.id;
@@ -249,16 +256,40 @@ function startAlert(device, timestamp) {
     '<div class="toast-body">📍 '+device.name+'</div>'+
     '<div class="toast-time">🕐 Inicio: '+formatDateTime(timestamp)+'</div>'+
     '<div class="toast-elapsed" id="elapsed-'+device.id+'">⏱ Transcurrido: 00:00</div>'+
+    '<div class="toast-remaining" id="remaining-'+device.id+'">⏳ Expira en: '+formatElapsed(CONFIG.alertDuration)+'</div>'+
     '<button class="toast-btn" onclick="acknowledgeAlert(\''+device.id+'\')">✅ Marcar como Atendida</button>';
   document.getElementById('alert-panel').appendChild(toast);
   s.toast = toast;
+
   s.tickInterval = setInterval(function() {
     var secs = elapsedSeconds(s.alertTimestamp);
+    var remaining = CONFIG.alertDuration - secs;
+
+    // Actualizar transcurrido
     var el = document.getElementById('elapsed-' + device.id);
     if (el) el.textContent = '⏱ Transcurrido: ' + formatElapsed(secs);
+
+    // Actualizar tiempo restante
+    var rem = document.getElementById('remaining-' + device.id);
+    if (rem) {
+      if (remaining > 0) {
+        rem.textContent = '⏳ Expira en: ' + formatElapsed(remaining);
+      } else {
+        rem.textContent = '⏳ Expirando...';
+      }
+    }
+
+    // Actualizar sidebar
     var tval = document.getElementById('tval-' + device.id);
     if (tval) tval.textContent = formatElapsed(secs);
+
+    // Auto-borrado cuando se cumple el tiempo prefijado
+    if (secs >= CONFIG.alertDuration) {
+      clearInterval(s.tickInterval);
+      endAlert(device);
+    }
   }, 1000);
+
   setTimeout(function() {
     var alertingDevices = CONFIG.devices.filter(function(d){ return state[d.id].alerting; });
     if (alertingDevices.length > 1) {
@@ -266,6 +297,7 @@ function startAlert(device, timestamp) {
       map.flyToBounds(group.getBounds().pad(0.4), { duration:1.5 });
     }
   }, 500);
+
   renderSidebar();
 }
 
@@ -322,10 +354,10 @@ function pollDevice(device) {
       s.initialized = true;
       s.lastHeardSeen = lastHeard;
       s.lastValue = val;
-      // Solo activar alarma al cargar si el evento es reciente (menos de 5 minutos)
       if (val === true && lastHeard) {
         var secsAgo = elapsedSeconds(lastHeard);
-        if (secsAgo < 300) {
+        // Activar solo si es reciente Y todavía dentro del tiempo de duración
+        if (secsAgo < CONFIG.alertDuration) {
           startAlert(device, lastHeard);
         }
       }
