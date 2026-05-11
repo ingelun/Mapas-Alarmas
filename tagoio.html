@@ -136,7 +136,7 @@ var isAdmin = false;
 var state = {};
 
 var map = L.map('map', { attributionControl:false });
-L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom:19 }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
 
 function makeOkIcon() { return L.divIcon({ html:'<div style="width:0;height:0"></div>', className:'', iconSize:[0,0], iconAnchor:[0,0] }); }
 function makeVisibleIcon() { return L.divIcon({ html:'<div class="marker-ok">📍</div>', className:'', iconSize:[32,32], iconAnchor:[16,16] }); }
