@@ -69,6 +69,7 @@
   .audio-banner{position:fixed;bottom:0;left:0;right:0;background:rgba(13,32,16,0.97);border-top:1px solid var(--accent);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;z-index:3000;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);gap:12px;}
   .audio-banner button{background:rgba(0,255,136,0.15);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-weight:700;white-space:nowrap;flex-shrink:0;}
   .audio-banner button:hover{background:rgba(0,255,136,0.3);}
+  .loading-msg{padding:20px;text-align:center;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--muted);}
   @media(max-width:768px){
     .hamburger{display:block;}
     .logo{font-size:13px;}
@@ -115,7 +116,9 @@
 <div class="main">
   <div class="sidebar" id="sidebar">
     <div class="sidebar-title">// dispositivos</div>
-    <div class="device-list" id="device-list"></div>
+    <div class="device-list" id="device-list">
+      <div class="loading-msg">⏳ Cargando dispositivos...</div>
+    </div>
     <div class="config-panel">
       <div class="config-row"><span>POLL</span><span class="config-val">5s</span></div>
       <div class="config-row"><span>DEVICES</span><span class="config-val" id="cfg-devices">—</span></div>
@@ -135,34 +138,39 @@ var CONFIG = {
   pollInterval:  5000,
   alertDuration: 300,
   apiBase:       "https://api.us-e1.tago.io",
-  devices: [
-    { id: "6a012f2ca93bc6000abb1edb", name: "xiao1", token: "8842b0a9-44a2-4f9e-9a2a-592a3144fc4d", label: "B1" },
-    { id: "6a013032a54086000aecb803", name: "xiao2", token: "ba60224e-6af6-46e5-b738-571e5a32e0fa", label: "B2" },
-    { id: "69fd4146370b0b000a49a9ab", name: "xiao3", token: "90a2d4f0-948b-41ac-8462-2bdfc7ca5b78", label: "B3" }
-  ]
+  profileToken:  "5f16d701-fcdc-4724-b5c9-245033604d9e",
+  deviceTag:     { key: "tipo", value: "alerta" }
 };
 
 var audioCtx = null;
 var audioReady = false;
+var speechReady = false;
 var mutedByUser = false;
 
 function activateAudio() {
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') {
-      audioCtx.resume().then(function() { audioReady = true; onAudioReady(); });
-    } else {
-      audioReady = true;
-      onAudioReady();
-    }
+      audioCtx.resume().then(function() { audioReady = true; });
+    } else { audioReady = true; }
   } catch(e) { console.warn('Web Audio no disponible:', e); }
+  if ('speechSynthesis' in window) {
+    speechReady = true;
+    window.speechSynthesis.getVoices();
+  }
+  onAudioReady();
 }
 
 function onAudioReady() {
   document.getElementById('audio-banner').style.display = 'none';
   document.getElementById('cfg-audio').textContent = 'activo';
   document.getElementById('cfg-audio').style.color = 'var(--success)';
-  playTone(440, 0.08, 0.1, 0);
+  if (audioReady) playTone(440, 0.08, 0.1, 0);
+  if (speechReady) {
+    var msg = new SpeechSynthesisUtterance('Sistema de alarmas activado');
+    msg.lang = 'es-AR'; msg.rate = 0.9; msg.volume = 0.5;
+    setTimeout(function() { window.speechSynthesis.speak(msg); }, 300);
+  }
 }
 
 function playTone(freq, vol, duration, delay) {
@@ -170,25 +178,39 @@ function playTone(freq, vol, duration, delay) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   var osc = audioCtx.createOscillator();
   var gain = audioCtx.createGain();
-  osc.connect(gain);
-  gain.connect(audioCtx.destination);
-  osc.type = 'square';
-  osc.frequency.value = freq;
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.type = 'square'; osc.frequency.value = freq;
   var t = audioCtx.currentTime + delay;
   gain.gain.setValueAtTime(vol, t);
   gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-  osc.start(t);
-  osc.stop(t + duration + 0.01);
+  osc.start(t); osc.stop(t + duration + 0.01);
 }
 
-function playAlarm() {
-  if (mutedByUser || !audioReady || !audioCtx) return;
-  playTone(880,  0.3,  0.14, 0.00);
-  playTone(880,  0.3,  0.14, 0.20);
-  playTone(1100, 0.35, 0.20, 0.40);
-  playTone(880,  0.3,  0.14, 0.80);
-  playTone(880,  0.3,  0.14, 1.00);
-  playTone(1100, 0.35, 0.20, 1.20);
+function playAlarm(deviceName) {
+  if (mutedByUser) return;
+  if (audioReady && audioCtx) {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    playTone(880,  0.3,  0.14, 0.00);
+    playTone(880,  0.3,  0.14, 0.20);
+    playTone(1100, 0.35, 0.20, 0.40);
+    playTone(880,  0.3,  0.14, 0.80);
+    playTone(880,  0.3,  0.14, 1.00);
+    playTone(1100, 0.35, 0.20, 1.20);
+  }
+  if (speechReady) {
+    window.speechSynthesis.cancel();
+    var texto = 'Atención. Alerta de ' + deviceName;
+    setTimeout(function() {
+      var msg1 = new SpeechSynthesisUtterance(texto);
+      msg1.lang = 'es-AR'; msg1.rate = 0.85; msg1.pitch = 1; msg1.volume = 1;
+      window.speechSynthesis.speak(msg1);
+    }, 1600);
+    setTimeout(function() {
+      var msg2 = new SpeechSynthesisUtterance(texto);
+      msg2.lang = 'es-AR'; msg2.rate = 0.85; msg2.pitch = 1; msg2.volume = 1;
+      window.speechSynthesis.speak(msg2);
+    }, 5000);
+  }
 }
 
 function toggleMute() {
@@ -196,16 +218,24 @@ function toggleMute() {
   var btn = document.getElementById('mute-btn');
   btn.textContent = mutedByUser ? '🔇' : '🔊';
   btn.style.color = mutedByUser ? 'var(--danger)' : 'var(--success)';
+  if (!mutedByUser && speechReady) {
+    var msg = new SpeechSynthesisUtterance('Sonido activado');
+    msg.lang = 'es-AR'; msg.volume = 0.5;
+    window.speechSynthesis.speak(msg);
+  }
 }
 
 var isAdmin = false;
+var devices = [];
 var state = {};
+var pollTimer = null;
+
 var map = L.map('map', { attributionControl:false });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
 
-function makeOkIcon() { return L.divIcon({ html:'<div style="width:0;height:0"></div>', className:'', iconSize:[0,0], iconAnchor:[0,0] }); }
+function makeOkIcon()      { return L.divIcon({ html:'<div style="width:0;height:0"></div>', className:'', iconSize:[0,0], iconAnchor:[0,0] }); }
 function makeVisibleIcon() { return L.divIcon({ html:'<div class="marker-ok">📍</div>', className:'', iconSize:[32,32], iconAnchor:[16,16] }); }
-function makeAlertIcon() { return L.divIcon({ html:'<div class="marker-pulse">🔔</div>', className:'', iconSize:[40,40], iconAnchor:[20,20] }); }
+function makeAlertIcon()   { return L.divIcon({ html:'<div class="marker-pulse">🔔</div>', className:'', iconSize:[40,40], iconAnchor:[20,20] }); }
 
 function formatDateTime(isoString) {
   if (!isoString) return '—';
@@ -226,21 +256,54 @@ function formatElapsed(secs) {
 }
 
 document.getElementById('cfg-duration').textContent = formatElapsed(CONFIG.alertDuration);
-document.getElementById('cfg-devices').textContent = CONFIG.devices.length;
 
-CONFIG.devices.forEach(function(dev) {
-  state[dev.id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastSeen:null, lastGroup:null, initialized:false, lat:null, lng:null };
-});
+function loadDevices() {
+  var url = CONFIG.apiBase + '/device?page=1&amount=100&filter_tag=' + CONFIG.deviceTag.key + ':' + CONFIG.deviceTag.value;
+  fetch(url, { headers: { 'Authorization': CONFIG.profileToken } })
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    if (!data.status || !data.result || data.result.length === 0) {
+      document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ No hay dispositivos con tag tipo=alerta</div>';
+      return;
+    }
+    return Promise.all(data.result.map(function(dev) {
+      return fetch(CONFIG.apiBase + '/device/' + dev.id + '/token', {
+        headers: { 'Authorization': CONFIG.profileToken }
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(tokenData) {
+        var token = tokenData.result && tokenData.result.length > 0 ? tokenData.result[0].token : null;
+        return { id: dev.id, name: dev.name, token: token };
+      });
+    }));
+  })
+  .then(function(devList) {
+    if (!devList) return;
+    devices = devList.filter(function(d){ return d.token; });
+    devices.forEach(function(dev) {
+      state[dev.id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastSeen:null, lastGroup:null, initialized:false, lat:null, lng:null };
+    });
+    document.getElementById('cfg-devices').textContent = devices.length;
+    renderSidebar();
+    if (pollTimer) clearInterval(pollTimer);
+    poll();
+    pollTimer = setInterval(poll, CONFIG.pollInterval);
+  })
+  .catch(function(e) {
+    console.error('Error cargando dispositivos:', e);
+    document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ Error al cargar dispositivos</div>';
+  });
+}
 
 function fitMapToDevices() {
-  var withCoords = CONFIG.devices.filter(function(d){ return state[d.id].lat && state[d.id].lng; });
+  var withCoords = devices.filter(function(d){ return state[d.id] && state[d.id].lat && state[d.id].lng; });
   if (withCoords.length === 0) return;
   if (withCoords.length === 1) { map.setView([state[withCoords[0].id].lat, state[withCoords[0].id].lng], 13); return; }
   var group = L.featureGroup(withCoords.map(function(d){ return state[d.id].marker; }));
   map.fitBounds(group.getBounds().pad(0.3));
 }
 function updateAlertCount() {
-  document.getElementById('cfg-alerts').textContent = CONFIG.devices.filter(function(d){ return state[d.id].alerting; }).length;
+  document.getElementById('cfg-alerts').textContent = devices.filter(function(d){ return state[d.id] && state[d.id].alerting; }).length;
 }
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
@@ -249,17 +312,19 @@ function toggleSidebar() {
 function renderSidebar() {
   var list = document.getElementById('device-list');
   list.innerHTML = '';
-  CONFIG.devices.forEach(function(d) {
+  if (devices.length === 0) { list.innerHTML = '<div class="loading-msg">⏳ Cargando dispositivos...</div>'; return; }
+  var shown = 0;
+  devices.forEach(function(d) {
     var s = state[d.id];
-    if (!s.lat || !s.lng) return;
+    if (!s || !s.lat || !s.lng) return;
+    shown++;
     var card = document.createElement('div');
     card.className = 'device-card' + (s.alerting ? ' alerting' : '');
     card.onclick = function() { map.flyTo([s.lat, s.lng], CONFIG.alertZoom, {duration:1.2}); if(window.innerWidth<=768) toggleSidebar(); };
     var eyeBtn = isAdmin ? '<button onclick="locateDevice(event,\''+d.id+'\')" style="background:none;border:1px solid var(--muted);color:var(--muted);border-radius:4px;padding:2px 6px;font-size:11px;cursor:pointer;margin-top:6px">👁 ubicar</button>' : '';
     var alertInfo = s.alerting && s.alertTimestamp ? '<div style="font-size:11px;color:var(--danger);font-family:\'Share Tech Mono\',monospace;margin-top:4px">🕐 '+formatDateTime(s.alertTimestamp)+'</div>' : '';
     card.innerHTML =
-      '<div class="device-name">'+d.label+' <span class="device-status-badge '+(s.alerting?'badge-active':'badge-ok')+'">'+(s.alerting?'⚠ ACTIVO':'✓ OK')+'</span></div>'+
-      '<div style="font-size:13px;color:var(--text)">'+d.name+'</div>'+
+      '<div class="device-name">'+d.name+' <span class="device-status-badge '+(s.alerting?'badge-active':'badge-ok')+'">'+(s.alerting?'⚠ ACTIVO':'✓ OK')+'</span></div>'+
       (isAdmin ? '<div class="device-coords">'+(s.lat?s.lat.toFixed(5):'-')+', '+(s.lng?s.lng.toFixed(5):'-')+'</div>' : '')+
       '<div class="device-last">'+(s.lastSeen ? 'Visto: '+s.lastSeen : 'Sin datos aún')+'</div>'+
       alertInfo+
@@ -267,6 +332,7 @@ function renderSidebar() {
       eyeBtn;
     list.appendChild(card);
   });
+  if (shown === 0) list.innerHTML = '<div class="loading-msg">⏳ Esperando datos de dispositivos...</div>';
   updateAlertCount();
 }
 function initMarker(device, lat, lng) {
@@ -280,19 +346,15 @@ function initMarker(device, lat, lng) {
 function startAlert(device, timestamp) {
   var s = state[device.id];
   if (s.alerting) return;
-  s.alerting = true;
-  s.alertTimestamp = timestamp;
-  playAlarm();
-  s.marker.setIcon(makeAlertIcon());
-  s.marker.unbindTooltip();
+  s.alerting = true; s.alertTimestamp = timestamp;
+  playAlarm(device.name);
+  s.marker.setIcon(makeAlertIcon()); s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>⚠ '+device.name+'</b>', { permanent:true, direction:'top', className:'alert-tooltip', offset:[0,-30] }).openTooltip();
   map.flyTo([s.lat, s.lng], CONFIG.alertZoom, { duration:1.5 });
   var toast = document.createElement('div');
-  toast.className = 'alert-toast';
-  toast.id = 'toast-' + device.id;
+  toast.className = 'alert-toast'; toast.id = 'toast-' + device.id;
   toast.innerHTML =
-    '<div class="toast-title">🔴 '+device.label+' — ALERTA</div>'+
-    '<div class="toast-body">📍 '+device.name+'</div>'+
+    '<div class="toast-title">🔴 '+device.name+' — ALERTA</div>'+
     '<div class="toast-time">🕐 Inicio: '+formatDateTime(timestamp)+'</div>'+
     '<div class="toast-elapsed" id="elapsed-'+device.id+'">⏱ Transcurrido: 00:00</div>'+
     '<div style="font-size:11px;color:var(--warning);font-family:\'Share Tech Mono\',monospace;margin-bottom:8px" id="remaining-'+device.id+'">⏳ Expira en: '+formatElapsed(CONFIG.alertDuration)+'</div>'+
@@ -300,84 +362,62 @@ function startAlert(device, timestamp) {
   document.getElementById('alert-panel').appendChild(toast);
   s.toast = toast;
   s.tickInterval = setInterval(function() {
-    var secs = elapsedSeconds(s.alertTimestamp);
-    var remaining = CONFIG.alertDuration - secs;
-    var el = document.getElementById('elapsed-' + device.id);
-    if (el) el.textContent = '⏱ Transcurrido: ' + formatElapsed(secs);
-    var rem = document.getElementById('remaining-' + device.id);
-    if (rem) rem.textContent = remaining > 0 ? '⏳ Expira en: '+formatElapsed(remaining) : '⏳ Expirando...';
-    var tval = document.getElementById('tval-' + device.id);
-    if (tval) tval.textContent = formatElapsed(secs);
+    var secs = elapsedSeconds(s.alertTimestamp), remaining = CONFIG.alertDuration - secs;
+    var el = document.getElementById('elapsed-'+device.id); if (el) el.textContent = '⏱ Transcurrido: '+formatElapsed(secs);
+    var rem = document.getElementById('remaining-'+device.id); if (rem) rem.textContent = remaining > 0 ? '⏳ Expira en: '+formatElapsed(remaining) : '⏳ Expirando...';
+    var tval = document.getElementById('tval-'+device.id); if (tval) tval.textContent = formatElapsed(secs);
     if (secs >= CONFIG.alertDuration) { clearInterval(s.tickInterval); endAlert(device); }
   }, 1000);
   setTimeout(function() {
-    var alerting = CONFIG.devices.filter(function(d){ return state[d.id].alerting && state[d.id].marker; });
-    if (alerting.length > 1) {
-      var group = L.featureGroup(alerting.map(function(d){ return state[d.id].marker; }));
-      map.flyToBounds(group.getBounds().pad(0.4), { duration:1.5 });
-    }
+    var alerting = devices.filter(function(d){ return state[d.id] && state[d.id].alerting && state[d.id].marker; });
+    if (alerting.length > 1) { var group = L.featureGroup(alerting.map(function(d){ return state[d.id].marker; })); map.flyToBounds(group.getBounds().pad(0.4), { duration:1.5 }); }
   }, 500);
   renderSidebar();
 }
-function acknowledgeAlert(deviceId) {
-  var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
-  if (device) endAlert(device);
-}
+function acknowledgeAlert(deviceId) { var device = devices.find(function(d){ return d.id===deviceId; }); if (device) endAlert(device); }
 function endAlert(device) {
-  var s = state[device.id];
-  if (!s.alerting) return;
+  var s = state[device.id]; if (!s || !s.alerting) return;
   s.alerting = false; s.alertTimestamp = null;
   clearInterval(s.tickInterval); s.tickInterval = null;
+  if (speechReady) window.speechSynthesis.cancel();
   s.marker.setIcon(makeOkIcon()); s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
-  if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
-  s.toast = null;
-  var alerting = CONFIG.devices.filter(function(d){ return state[d.id].alerting && state[d.id].marker; });
-  if (alerting.length > 1) {
-    var group = L.featureGroup(alerting.map(function(d){ return state[d.id].marker; }));
-    map.flyToBounds(group.getBounds().pad(0.4), { duration:1.2 });
-  } else if (alerting.length === 1) {
-    map.flyTo([state[alerting[0].id].lat, state[alerting[0].id].lng], CONFIG.alertZoom, { duration:1.2 });
-  } else { fitMapToDevices(); }
+  if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast); s.toast = null;
+  var alerting = devices.filter(function(d){ return state[d.id] && state[d.id].alerting && state[d.id].marker; });
+  if (alerting.length > 1) { var group = L.featureGroup(alerting.map(function(d){ return state[d.id].marker; })); map.flyToBounds(group.getBounds().pad(0.4), { duration:1.2 }); }
+  else if (alerting.length === 1) { map.flyTo([state[alerting[0].id].lat, state[alerting[0].id].lng], CONFIG.alertZoom, { duration:1.2 }); }
+  else { fitMapToDevices(); }
   renderSidebar();
 }
 function pollDevice(device) {
-  var url = CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3';
-  return fetch(url, { headers: { 'Authorization': device.token } })
+  var s = state[device.id]; if (!s) return Promise.resolve();
+  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3', { headers: { 'Authorization': device.token } })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     if (!data.status || !data.result || data.result.length === 0) return;
     var results = data.result;
-    var s = state[device.id];
-    var latData = results.find(function(r){ return r.variable === 'lat'; });
-    var lngData = results.find(function(r){ return r.variable === 'lng'; });
-    var btnData = results.find(function(r){ return r.variable === 'button_press'; });
+    var latData = results.find(function(r){ return r.variable==='lat'; });
+    var lngData = results.find(function(r){ return r.variable==='lng'; });
+    var btnData = results.find(function(r){ return r.variable==='button_press'; });
     if (!latData || !lngData || !btnData) return;
-    var lat = latData.value, lng = lngData.value;
-    var btnVal = btnData.value, btnTime = btnData.time, btnGroup = btnData.group;
+    var lat=latData.value, lng=lngData.value, btnVal=btnData.value, btnTime=btnData.time, btnGroup=btnData.group;
     if (!s.marker) { initMarker(device, lat, lng); fitMapToDevices(); renderSidebar(); }
     s.lastSeen = new Date().toLocaleTimeString("es-AR");
     if (!s.initialized) {
       s.initialized = true; s.lastGroup = btnGroup;
-      if (btnVal === true && btnTime) {
-        var secsAgo = elapsedSeconds(btnTime);
-        if (secsAgo < CONFIG.alertDuration) startAlert(device, btnTime);
-      }
+      if (btnVal === true && btnTime && elapsedSeconds(btnTime) < CONFIG.alertDuration) startAlert(device, btnTime);
       return;
     }
-    var newEvent = (btnGroup && btnGroup !== s.lastGroup);
-    s.lastGroup = btnGroup;
+    var newEvent = (btnGroup && btnGroup !== s.lastGroup); s.lastGroup = btnGroup;
     if (btnVal === true && !s.alerting && newEvent) startAlert(device, btnTime);
     renderSidebar();
   })
-  .catch(function(){
-    document.getElementById('conn-dot').className='status-dot';
-    document.getElementById('conn-label').textContent='ERROR';
-  });
+  .catch(function(){ document.getElementById('conn-dot').className='status-dot'; document.getElementById('conn-label').textContent='ERROR'; });
 }
 function poll() {
+  if (devices.length === 0) return;
   document.getElementById('spinner').classList.add('active');
-  Promise.all(CONFIG.devices.map(function(d){ return pollDevice(d); })).then(function() {
+  Promise.all(devices.map(function(d){ return pollDevice(d); })).then(function() {
     document.getElementById('spinner').classList.remove('active');
     document.getElementById('last-poll').textContent = new Date().toLocaleTimeString('es-AR');
     document.getElementById('conn-dot').className='status-dot online';
@@ -386,33 +426,21 @@ function poll() {
 }
 function locateDevice(e, deviceId) {
   e.stopPropagation();
-  var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
-  if (!device) return;
-  var s = state[deviceId];
-  if (!s.lat || !s.lng) return;
+  var device = devices.find(function(d){ return d.id===deviceId; }); if (!device) return;
+  var s = state[deviceId]; if (!s || !s.lat || !s.lng) return;
   map.flyTo([s.lat, s.lng], 16, { duration:1.2 });
   if (!s.alerting) {
     s.marker.setIcon(makeVisibleIcon()); s.marker.unbindTooltip();
     s.marker.bindTooltip('<b>'+device.name+'</b><br>📍 Ubicación', { permanent:true, direction:'top', offset:[0,-10] }).openTooltip();
-    setTimeout(function() {
-      if (!s.alerting) {
-        s.marker.setIcon(makeOkIcon()); s.marker.unbindTooltip();
-        s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
-      }
-    }, 5000);
+    setTimeout(function() { if (!s.alerting) { s.marker.setIcon(makeOkIcon()); s.marker.unbindTooltip(); s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] }); } }, 5000);
   }
 }
 function adminLogin() {
   var pwd = prompt("Contraseña de administrador:");
-  if (pwd===CONFIG.adminPassword) {
-    isAdmin=true;
-    document.getElementById('admin-btn').textContent='🔓 Admin';
-    document.getElementById('admin-btn').style.color='var(--success)';
-    renderSidebar();
-  } else if (pwd!==null) { alert("Contraseña incorrecta"); }
+  if (pwd===CONFIG.adminPassword) { isAdmin=true; document.getElementById('admin-btn').textContent='🔓 Admin'; document.getElementById('admin-btn').style.color='var(--success)'; renderSidebar(); }
+  else if (pwd!==null) { alert("Contraseña incorrecta"); }
 }
-poll();
-setInterval(poll, CONFIG.pollInterval);
+loadDevices();
 </script>
 </body>
 </html>
