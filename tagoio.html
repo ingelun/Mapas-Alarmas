@@ -53,7 +53,7 @@
   @keyframes slide-in{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
   .toast-title{font-size:13px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:6px;}
   .toast-body{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
-  .toast-time{font-size:11px;color:var(--warning);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
+  .toast-time{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
   .toast-elapsed{font-size:11px;color:var(--accent);font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
   .toast-btn{background:rgba(0,232,150,0.15);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-weight:700;width:100%;transition:all 0.2s;}
   .toast-btn:hover{background:rgba(0,232,150,0.3);}
@@ -66,6 +66,9 @@
   .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1400;}
   .overlay.visible{display:block;}
   .platform-badge{background:rgba(0,255,136,0.15);border:1px solid var(--accent);color:var(--accent);font-family:'Share Tech Mono',monospace;font-size:10px;padding:2px 8px;border-radius:4px;margin-left:8px;}
+  .audio-banner{position:fixed;bottom:0;left:0;right:0;background:rgba(13,32,16,0.97);border-top:1px solid var(--accent);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;z-index:3000;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--accent);gap:12px;}
+  .audio-banner button{background:rgba(0,255,136,0.15);border:1px solid var(--accent);color:var(--accent);border-radius:6px;padding:6px 16px;font-size:12px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-weight:700;white-space:nowrap;flex-shrink:0;}
+  .audio-banner button:hover{background:rgba(0,255,136,0.3);}
   @media(max-width:768px){
     .hamburger{display:block;}
     .logo{font-size:13px;}
@@ -77,11 +80,16 @@
     .alert-toast{padding:8px 10px;}
     .toast-title{font-size:11px;}
     .toast-body,.toast-time,.toast-elapsed{font-size:10px;}
+    .audio-banner{font-size:11px;padding:8px 14px;}
   }
 </style>
 </head>
 <body>
 <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+<div class="audio-banner" id="audio-banner">
+  <span>🔊 Tocá para activar el sonido de alarmas</span>
+  <button onclick="activateAudio()">Activar sonido</button>
+</div>
 <div class="topbar">
   <div style="display:flex;align-items:center;gap:10px">
     <button class="hamburger" onclick="toggleSidebar()">☰</button>
@@ -98,8 +106,9 @@
       <span>cada 5s</span>
     </div>
   </div>
-  <div style="display:flex;align-items:center;gap:12px">
+  <div style="display:flex;align-items:center;gap:8px">
     <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)" id="last-poll">—</div>
+    <button id="mute-btn" onclick="toggleMute()" style="background:none;border:1px solid var(--border);color:var(--success);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace">🔊</button>
     <button id="admin-btn" onclick="adminLogin()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace">🔒 Admin</button>
   </div>
 </div>
@@ -113,6 +122,7 @@
       <div class="config-row"><span>ALERTAS</span><span class="config-val" id="cfg-alerts">0</span></div>
       <div class="config-row"><span>DURACIÓN</span><span class="config-val" id="cfg-duration">—</span></div>
       <div class="config-row"><span>PLATAFORMA</span><span class="config-val">TagoIO</span></div>
+      <div class="config-row"><span>SONIDO</span><span class="config-val" id="cfg-audio">inactivo</span></div>
     </div>
   </div>
   <div id="map"></div>
@@ -132,9 +142,64 @@ var CONFIG = {
   ]
 };
 
+var audioCtx = null;
+var audioReady = false;
+var mutedByUser = false;
+
+function activateAudio() {
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(function() { audioReady = true; onAudioReady(); });
+    } else {
+      audioReady = true;
+      onAudioReady();
+    }
+  } catch(e) { console.warn('Web Audio no disponible:', e); }
+}
+
+function onAudioReady() {
+  document.getElementById('audio-banner').style.display = 'none';
+  document.getElementById('cfg-audio').textContent = 'activo';
+  document.getElementById('cfg-audio').style.color = 'var(--success)';
+  playTone(440, 0.08, 0.1, 0);
+}
+
+function playTone(freq, vol, duration, delay) {
+  if (!audioReady || !audioCtx) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  var osc = audioCtx.createOscillator();
+  var gain = audioCtx.createGain();
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  var t = audioCtx.currentTime + delay;
+  gain.gain.setValueAtTime(vol, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  osc.start(t);
+  osc.stop(t + duration + 0.01);
+}
+
+function playAlarm() {
+  if (mutedByUser || !audioReady || !audioCtx) return;
+  playTone(880,  0.3,  0.14, 0.00);
+  playTone(880,  0.3,  0.14, 0.20);
+  playTone(1100, 0.35, 0.20, 0.40);
+  playTone(880,  0.3,  0.14, 0.80);
+  playTone(880,  0.3,  0.14, 1.00);
+  playTone(1100, 0.35, 0.20, 1.20);
+}
+
+function toggleMute() {
+  mutedByUser = !mutedByUser;
+  var btn = document.getElementById('mute-btn');
+  btn.textContent = mutedByUser ? '🔇' : '🔊';
+  btn.style.color = mutedByUser ? 'var(--danger)' : 'var(--success)';
+}
+
 var isAdmin = false;
 var state = {};
-
 var map = L.map('map', { attributionControl:false });
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom:19 }).addTo(map);
 
@@ -148,17 +213,13 @@ function formatDateTime(isoString) {
   var pad = function(n){ return n<10?'0'+n:n; };
   return pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+' '+pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
 }
-
 function elapsedSeconds(isoString) {
   if (!isoString) return 0;
   return Math.floor((Date.now() - new Date(isoString).getTime()) / 1000);
 }
-
 function formatElapsed(secs) {
   if (secs < 0) secs = 0;
-  var h = Math.floor(secs/3600);
-  var m = Math.floor((secs%3600)/60);
-  var s = secs%60;
+  var h = Math.floor(secs/3600), m = Math.floor((secs%3600)/60), s = secs%60;
   var pad = function(n){ return n<10?'0'+n:n; };
   if (h > 0) return pad(h)+':'+pad(m)+':'+pad(s);
   return pad(m)+':'+pad(s);
@@ -178,16 +239,13 @@ function fitMapToDevices() {
   var group = L.featureGroup(withCoords.map(function(d){ return state[d.id].marker; }));
   map.fitBounds(group.getBounds().pad(0.3));
 }
-
 function updateAlertCount() {
   document.getElementById('cfg-alerts').textContent = CONFIG.devices.filter(function(d){ return state[d.id].alerting; }).length;
 }
-
 function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('overlay').classList.toggle('visible');
 }
-
 function renderSidebar() {
   var list = document.getElementById('device-list');
   list.innerHTML = '';
@@ -211,22 +269,20 @@ function renderSidebar() {
   });
   updateAlertCount();
 }
-
 function initMarker(device, lat, lng) {
   var s = state[device.id];
   if (s.marker) return;
-  s.lat = lat;
-  s.lng = lng;
+  s.lat = lat; s.lng = lng;
   var marker = L.marker([lat, lng], { icon:makeOkIcon() }).addTo(map);
   marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
   s.marker = marker;
 }
-
 function startAlert(device, timestamp) {
   var s = state[device.id];
   if (s.alerting) return;
   s.alerting = true;
   s.alertTimestamp = timestamp;
+  playAlarm();
   s.marker.setIcon(makeAlertIcon());
   s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>⚠ '+device.name+'</b>', { permanent:true, direction:'top', className:'alert-tooltip', offset:[0,-30] }).openTooltip();
@@ -263,21 +319,16 @@ function startAlert(device, timestamp) {
   }, 500);
   renderSidebar();
 }
-
 function acknowledgeAlert(deviceId) {
   var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
   if (device) endAlert(device);
 }
-
 function endAlert(device) {
   var s = state[device.id];
   if (!s.alerting) return;
-  s.alerting = false;
-  s.alertTimestamp = null;
-  clearInterval(s.tickInterval);
-  s.tickInterval = null;
-  s.marker.setIcon(makeOkIcon());
-  s.marker.unbindTooltip();
+  s.alerting = false; s.alertTimestamp = null;
+  clearInterval(s.tickInterval); s.tickInterval = null;
+  s.marker.setIcon(makeOkIcon()); s.marker.unbindTooltip();
   s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
   if (s.toast && s.toast.parentNode) s.toast.parentNode.removeChild(s.toast);
   s.toast = null;
@@ -287,12 +338,9 @@ function endAlert(device) {
     map.flyToBounds(group.getBounds().pad(0.4), { duration:1.2 });
   } else if (alerting.length === 1) {
     map.flyTo([state[alerting[0].id].lat, state[alerting[0].id].lng], CONFIG.alertZoom, { duration:1.2 });
-  } else {
-    fitMapToDevices();
-  }
+  } else { fitMapToDevices(); }
   renderSidebar();
 }
-
 function pollDevice(device) {
   var url = CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3';
   return fetch(url, { headers: { 'Authorization': device.token } })
@@ -305,16 +353,12 @@ function pollDevice(device) {
     var lngData = results.find(function(r){ return r.variable === 'lng'; });
     var btnData = results.find(function(r){ return r.variable === 'button_press'; });
     if (!latData || !lngData || !btnData) return;
-    var lat = latData.value;
-    var lng = lngData.value;
-    var btnVal = btnData.value;
-    var btnTime = btnData.time;
-    var btnGroup = btnData.group;
+    var lat = latData.value, lng = lngData.value;
+    var btnVal = btnData.value, btnTime = btnData.time, btnGroup = btnData.group;
     if (!s.marker) { initMarker(device, lat, lng); fitMapToDevices(); renderSidebar(); }
     s.lastSeen = new Date().toLocaleTimeString("es-AR");
     if (!s.initialized) {
-      s.initialized = true;
-      s.lastGroup = btnGroup;
+      s.initialized = true; s.lastGroup = btnGroup;
       if (btnVal === true && btnTime) {
         var secsAgo = elapsedSeconds(btnTime);
         if (secsAgo < CONFIG.alertDuration) startAlert(device, btnTime);
@@ -331,7 +375,6 @@ function pollDevice(device) {
     document.getElementById('conn-label').textContent='ERROR';
   });
 }
-
 function poll() {
   document.getElementById('spinner').classList.add('active');
   Promise.all(CONFIG.devices.map(function(d){ return pollDevice(d); })).then(function() {
@@ -341,7 +384,6 @@ function poll() {
     document.getElementById('conn-label').textContent='CONECTADO';
   });
 }
-
 function locateDevice(e, deviceId) {
   e.stopPropagation();
   var device = CONFIG.devices.find(function(d){ return d.id===deviceId; });
@@ -350,19 +392,16 @@ function locateDevice(e, deviceId) {
   if (!s.lat || !s.lng) return;
   map.flyTo([s.lat, s.lng], 16, { duration:1.2 });
   if (!s.alerting) {
-    s.marker.setIcon(makeVisibleIcon());
-    s.marker.unbindTooltip();
+    s.marker.setIcon(makeVisibleIcon()); s.marker.unbindTooltip();
     s.marker.bindTooltip('<b>'+device.name+'</b><br>📍 Ubicación', { permanent:true, direction:'top', offset:[0,-10] }).openTooltip();
     setTimeout(function() {
       if (!s.alerting) {
-        s.marker.setIcon(makeOkIcon());
-        s.marker.unbindTooltip();
+        s.marker.setIcon(makeOkIcon()); s.marker.unbindTooltip();
         s.marker.bindTooltip('<b>'+device.name+'</b>', { permanent:false, direction:'top', offset:[0,-10] });
       }
     }, 5000);
   }
 }
-
 function adminLogin() {
   var pwd = prompt("Contraseña de administrador:");
   if (pwd===CONFIG.adminPassword) {
@@ -372,7 +411,6 @@ function adminLogin() {
     renderSidebar();
   } else if (pwd!==null) { alert("Contraseña incorrecta"); }
 }
-
 poll();
 setInterval(poll, CONFIG.pollInterval);
 </script>
