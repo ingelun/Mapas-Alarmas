@@ -137,7 +137,7 @@ var CONFIG = {
   pollInterval:  5000,
   alertDuration: 300,
   apiBase:       "https://crimson-recipe-44b3.ingelun.workers.dev",
-  profileToken: "f6547053-8738-4325-9be3-f718bd863612",
+  profileToken:  "f6547053-8738-4325-9be3-f718bd863612",
   deviceTag:     { key: "tipo", value: "alerta" }
 };
 
@@ -263,11 +263,22 @@ function loadDevices() {
   .then(function(data) {
     if (!data.status || !data.result || data.result.length === 0) {
       document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ No hay dispositivos con tag tipo=alerta</div>';
-      return;
+      return null;
     }
-    devices = data.result.map(function(dev) {
-      return { id: dev.id, name: dev.name, token: CONFIG.profileToken };
-    });
+    return Promise.all(data.result.map(function(dev) {
+      return fetch(CONFIG.apiBase + '/device/' + dev.id + '/token', {
+        headers: { 'Authorization': CONFIG.profileToken }
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(tokenData) {
+        var token = tokenData.result && tokenData.result.length > 0 ? tokenData.result[0].token : null;
+        return { id: dev.id, name: dev.name, token: token };
+      });
+    }));
+  })
+  .then(function(devList) {
+    if (!devList) return;
+    devices = devList.filter(function(d){ return d.token; });
     devices.forEach(function(dev) {
       state[dev.id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastSeen:null, lastGroup:null, initialized:false, lat:null, lng:null };
     });
@@ -379,7 +390,9 @@ function endAlert(device) {
 }
 function pollDevice(device) {
   var s = state[device.id]; if (!s) return Promise.resolve();
-  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3&origin_id=' + device.id, { headers: { 'Authorization': device.token } })
+  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3', {
+    headers: { 'Authorization': device.token }
+  })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     if (!data.status || !data.result || data.result.length === 0) return;
