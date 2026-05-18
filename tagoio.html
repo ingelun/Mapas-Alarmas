@@ -287,24 +287,6 @@ function loadDevices() {
     document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ Error al cargar dispositivos</div>';
   });
 }
-  .then(function(devList) {
-    if (!devList) return;
-    devices = devList.filter(function(d){ return d.token; });
-    devices.forEach(function(dev) {
-      state[dev.id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastSeen:null, lastGroup:null, initialized:false, lat:null, lng:null };
-    });
-    document.getElementById('cfg-devices').textContent = devices.length;
-    renderSidebar();
-    if (pollTimer) clearInterval(pollTimer);
-    poll();
-    pollTimer = setInterval(poll, CONFIG.pollInterval);
-  })
-  .catch(function(e) {
-    console.error('Error cargando dispositivos:', e);
-    document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ Error al cargar dispositivos</div>';
-  });
-}
-
 function fitMapToDevices() {
   var withCoords = devices.filter(function(d){ return state[d.id] && state[d.id].lat && state[d.id].lng; });
   if (withCoords.length === 0) return;
