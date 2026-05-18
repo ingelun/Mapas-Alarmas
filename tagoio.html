@@ -52,7 +52,6 @@
   .alert-toast{background:var(--panel);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:8px;padding:12px 14px;pointer-events:all;animation:slide-in 0.3s ease;box-shadow:0 4px 20px rgba(255,59,92,0.3);}
   @keyframes slide-in{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
   .toast-title{font-size:13px;font-weight:700;color:var(--danger);display:flex;align-items:center;gap:6px;margin-bottom:6px;}
-  .toast-body{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
   .toast-time{font-size:12px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:4px;}
   .toast-elapsed{font-size:11px;color:var(--accent);font-family:'Share Tech Mono',monospace;margin-bottom:8px;}
   .toast-btn{background:rgba(0,232,150,0.15);border:1px solid var(--success);color:var(--success);border-radius:6px;padding:5px 12px;font-size:11px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-weight:700;width:100%;transition:all 0.2s;}
@@ -80,7 +79,7 @@
     .alert-panel{width:calc(100% - 32px);right:16px;top:58px;}
     .alert-toast{padding:8px 10px;}
     .toast-title{font-size:11px;}
-    .toast-body,.toast-time,.toast-elapsed{font-size:10px;}
+    .toast-elapsed{font-size:10px;}
     .audio-banner{font-size:11px;padding:8px 14px;}
   }
 </style>
@@ -137,7 +136,7 @@ var CONFIG = {
   alertZoom:     13,
   pollInterval:  5000,
   alertDuration: 300,
-  apiBase: "https://crimson-recipe-44b3.ingelun.workers.dev",
+  apiBase:       "https://crimson-recipe-44b3.ingelun.workers.dev",
   profileToken:  "5f16d701-fcdc-4724-b5c9-245033604d9e",
   deviceTag:     { key: "tipo", value: "alerta" }
 };
@@ -266,13 +265,9 @@ function loadDevices() {
       document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ No hay dispositivos con tag tipo=alerta</div>';
       return;
     }
-    return data.result.map(function(dev) {
+    devices = data.result.map(function(dev) {
       return { id: dev.id, name: dev.name, token: CONFIG.profileToken };
     });
-  })
-  .then(function(devList) {
-    if (!devList) return;
-    devices = devList;
     devices.forEach(function(dev) {
       state[dev.id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastSeen:null, lastGroup:null, initialized:false, lat:null, lng:null };
     });
@@ -283,10 +278,11 @@ function loadDevices() {
     pollTimer = setInterval(poll, CONFIG.pollInterval);
   })
   .catch(function(e) {
-    console.error('Error:', e);
+    console.error('Error cargando dispositivos:', e);
     document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ Error al cargar dispositivos</div>';
   });
 }
+
 function fitMapToDevices() {
   var withCoords = devices.filter(function(d){ return state[d.id] && state[d.id].lat && state[d.id].lng; });
   if (withCoords.length === 0) return;
@@ -383,7 +379,7 @@ function endAlert(device) {
 }
 function pollDevice(device) {
   var s = state[device.id]; if (!s) return Promise.resolve();
-  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3', { headers: { 'Authorization': device.token } })
+  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3&device=' + device.id, { headers: { 'Authorization': device.token } })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     if (!data.status || !data.result || data.result.length === 0) return;
