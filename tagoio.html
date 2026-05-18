@@ -379,7 +379,7 @@ function endAlert(device) {
 }
 function pollDevice(device) {
   var s = state[device.id]; if (!s) return Promise.resolve();
-  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3&device=' + device.id, { headers: { 'Authorization': device.token } })
+  return fetch(CONFIG.apiBase + '/data?variable[]=button_press&variable[]=lat&variable[]=lng&qty=3&origin_id=' + device.id, { headers: { 'Authorization': device.token } })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     if (!data.status || !data.result || data.result.length === 0) return;
