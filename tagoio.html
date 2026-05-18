@@ -266,17 +266,27 @@ function loadDevices() {
       document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ No hay dispositivos con tag tipo=alerta</div>';
       return;
     }
-    return Promise.all(data.result.map(function(dev) {
-      return fetch(CONFIG.apiBase + '/device/' + dev.id + '/token', {
-        headers: { 'Authorization': CONFIG.profileToken }
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(tokenData) {
-        var token = tokenData.result && tokenData.result.length > 0 ? tokenData.result[0].token : null;
-        return { id: dev.id, name: dev.name, token: token };
-      });
-    }));
+    return data.result.map(function(dev) {
+      return { id: dev.id, name: dev.name, token: CONFIG.profileToken };
+    });
   })
+  .then(function(devList) {
+    if (!devList) return;
+    devices = devList;
+    devices.forEach(function(dev) {
+      state[dev.id] = { alerting:false, marker:null, toast:null, tickInterval:null, alertTimestamp:null, lastSeen:null, lastGroup:null, initialized:false, lat:null, lng:null };
+    });
+    document.getElementById('cfg-devices').textContent = devices.length;
+    renderSidebar();
+    if (pollTimer) clearInterval(pollTimer);
+    poll();
+    pollTimer = setInterval(poll, CONFIG.pollInterval);
+  })
+  .catch(function(e) {
+    console.error('Error:', e);
+    document.getElementById('device-list').innerHTML = '<div class="loading-msg">⚠ Error al cargar dispositivos</div>';
+  });
+}
   .then(function(devList) {
     if (!devList) return;
     devices = devList.filter(function(d){ return d.token; });
